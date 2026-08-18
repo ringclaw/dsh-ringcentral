@@ -179,8 +179,19 @@ describe("inbound admission — group dm", () => {
     expect(blocked.admitted).toBe(false);
     if (!blocked.admitted) expect(blocked.reason).toBe("group dm not allowlisted");
 
-    const allowed = makeAccount({ groupDmEnabled: true, groupDmChannels: { "group-1": { allow: true } } });
-    const ok = await run(makePost({ groupId: "group-1" }), allowed, {
+    // 全局 requireMention（默认 true）同样作用于 Group DM；per-chat 可关闭
+    const gated = makeAccount({ groupDmEnabled: true, groupDmChannels: { "group-1": { allow: true } } });
+    const dropped = await run(makePost({ groupId: "group-1" }), gated, {
+      getChatInfo: async () => ({ id: "group-1", type: "Group" } as Chat),
+    });
+    expect(dropped.admitted).toBe(false);
+    if (!dropped.admitted) expect(dropped.reason).toBe("mention required");
+
+    const free = makeAccount({
+      groupDmEnabled: true,
+      groupDmChannels: { "group-1": { allow: true, requireMention: false } },
+    });
+    const ok = await run(makePost({ groupId: "group-1" }), free, {
       getChatInfo: async () => ({ id: "group-1", type: "Group" } as Chat),
     });
     expect(ok.admitted).toBe(true);

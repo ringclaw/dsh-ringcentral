@@ -103,98 +103,33 @@ export interface PaginatedRecords<T> {
   };
 }
 
-// Config types
-export interface RingCentralOwnerCredentials {
-  clientId?: string;
-  clientSecret?: string;
-  jwt?: string;
-}
+// Config types — 唯一来源是 Schemastery schema（src/config.ts），这里只做别名，
+// 避免在插件层与 RingCentral 层重复声明同一份配置字段。
+import type { ImRingCentralConfig, TeamConfig, OwnerCredentialsConfig, ProcessingPlaceholderConfig, AttachmentDownloadConfig } from "../config.js";
 
+export type RingCentralConfig = ImRingCentralConfig;
+export type RingCentralTeamConfig = TeamConfig;
+export type RingCentralGroupDmConfig = TeamConfig;
+export type RingCentralDmPolicy = ImRingCentralConfig["dmPolicy"];
+export type RingCentralGroupPolicy = ImRingCentralConfig["groupPolicy"];
+export type RingCentralReplyToMode = ImRingCentralConfig["replyToMode"];
+export type RingCentralOwnerCredentials = OwnerCredentialsConfig;
+export type { ProcessingPlaceholderConfig, AttachmentDownloadConfig };
+
+/** Owner JWT 凭据三元组（三个字段全部就绪才算配置完成） */
 export interface ResolvedRingCentralOwnerCredentials {
   clientId: string;
   clientSecret: string;
   jwt: string;
 }
 
-export type RingCentralReplyToMode = "off" | "first" | "all";
-
-export interface ProcessingPlaceholderConfig {
-  enabled?: boolean;
-  initialText?: string;
-  delayedText?: string;
-  editDelaySeconds?: number;
-}
-
-export interface AttachmentDownloadConfig {
-  enabled?: boolean;
-  maxCount?: number;
-  maxBytes?: number;
-}
-
-export type RingCentralDmPolicy = "disabled" | "allowlist" | "pairing" | "open";
-export type RingCentralGroupPolicy = "disabled" | "allowlist" | "open";
-
-export interface RingCentralTeamConfig {
-  allow?: boolean;
-  requireMention?: boolean;
-  systemPrompt?: string;
-  users?: Array<string | number>;
-}
-
-export interface RingCentralGroupDmConfig {
-  allow?: boolean;
-  requireMention?: boolean;
-  systemPrompt?: string;
-  users?: Array<string | number>;
-}
-
-export interface RingCentralConfig {
-  botToken?: string;
-  ownerCredentials?: RingCentralOwnerCredentials;
-  server?: string;
-  botExtensionId?: string;
-  dmPolicy?: RingCentralDmPolicy;
-  allowFrom?: Array<string | number>;
-  dangerouslyAllowEmailMatching?: boolean;
-  groupPolicy?: RingCentralGroupPolicy;
-  teams?: Record<string, RingCentralTeamConfig>;
-  groupDmEnabled?: boolean;
-  groupDmChannels?: Record<string, RingCentralGroupDmConfig>;
-  threadRequireMention?: boolean;
-  noThreadChannels?: string[];
-  replyToMode?: RingCentralReplyToMode;
-  processingPlaceholder?: ProcessingPlaceholderConfig;
-  attachments?: AttachmentDownloadConfig;
-  debugInboundMessages?: boolean;
-  historyMessageLimit?: number;
-  homeChannel?: string;
-  homeChannelName?: string;
-  requireMention?: boolean;
-  textChunkLimit?: number;
-  allowBots?: boolean;
-}
-
+/**
+ * 运行时账号视图：解析后的密钥 + 带默认值/钳制的配置。
+ * 行为配置一律通过 account.config 读取（dsh 最佳实践：配置单一来源）。
+ */
 export interface ResolvedAccount {
   botToken: string;
-  ownerCredentials?: ResolvedRingCentralOwnerCredentials;
   server: string;
-  allowFrom: string[];
-  dangerouslyAllowEmailMatching: boolean;
-  groupDmEnabled: boolean;
-  groupDmChannels: Record<string, RingCentralGroupDmConfig>;
-  noThreadChannels: string[];
-  replyToMode: RingCentralReplyToMode;
-  requireMention: boolean;
-  requireMentionExplicit: boolean;
-  threadRequireMention: boolean;
-  groupPolicy: RingCentralGroupPolicy;
-  dmPolicy: RingCentralDmPolicy;
-  textChunkLimit?: number;
-  processingPlaceholder: Required<ProcessingPlaceholderConfig>;
-  attachments: Required<AttachmentDownloadConfig>;
-  debugInboundMessages: boolean;
-  historyMessageLimit: number;
-  homeChannel?: string;
-  homeChannelName?: string;
-  config: RingCentralConfig;
+  ownerCredentials?: ResolvedRingCentralOwnerCredentials;
+  config: ImRingCentralConfig;
 }

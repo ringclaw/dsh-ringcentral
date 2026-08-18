@@ -76,8 +76,8 @@ export async function bootstrapGateway(
         text: opts.text,
         replyToId: opts.replyToId,
         threadId: opts.threadId,
-        replyToMode: account.replyToMode,
-        noThreadChannels: account.noThreadChannels,
+        replyToMode: account.config.replyToMode,
+        noThreadChannels: account.config.noThreadChannels,
         tracker,
         markOwnPost,
         convertMarkdown: opts.convertMarkdown ?? true,
@@ -169,7 +169,7 @@ export async function bootstrapGateway(
     });
 
     if (!decision.admitted) {
-      if (config.debug || account.debugInboundMessages) {
+      if (config.debug || account.config.debugInboundMessages) {
         logger.debug('im-ringcentral: inbound dropped: chatId=' + post.groupId + ' reason=' + decision.reason);
       }
       return;
@@ -250,8 +250,8 @@ export async function bootstrapGateway(
     .effect(() => {
       const controller = new AbortController();
       const ignoredTexts = [
-        account.processingPlaceholder.initialText,
-        account.processingPlaceholder.delayedText,
+        account.config.processingPlaceholder.initialText,
+        account.config.processingPlaceholder.delayedText,
       ];
 
       // bot 订阅（过滤自身 post）

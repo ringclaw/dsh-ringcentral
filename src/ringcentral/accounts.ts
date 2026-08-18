@@ -1,34 +1,34 @@
-// Account resolution: config plus RC_* environment variables. Single-account only.
-// Adapted from openclaw-ringcentral src/accounts.ts.
-
-import type {
-  ProcessingPlaceholderConfig,
-  ResolvedAccount,
-  ResolvedRingCentralOwnerCredentials,
-  RingCentralConfig,
-  RingCentralDmPolicy,
-  RingCentralGroupDmConfig,
-  RingCentralGroupPolicy,
-  RingCentralOwnerCredentials,
-  RingCentralReplyToMode,
-  RingCentralTeamConfig,
-} from "./types.js";
+/**
+ * 账号解析：Schema 默认值 + 密钥环境变量。单账号。
+ *
+ * dsh 最佳实践：行为配置只来自 cordis 配置树（Schemastery 已填默认值），
+ * 插件只直接读密钥类环境变量：RC_BOT_TOKEN / RC_USER_* / RC_SERVER_URL。
+ * 需要环境变量驱动的行为配置，请用 cordis 的 ${VAR} 插值写在 cordis.yml /
+ * cordis.patch.yml 里（参考 cordis.yml 注释示例），不要在插件里再维护一套
+ * RC_* 环境变量命名空间——那会与配置字段重复。
+ */
+import type { ImRingCentralConfig, OwnerCredentialsConfig } from "../config.js";
 import { DEFAULT_SERVER } from "./shared.js";
+import type { ResolvedAccount, ResolvedRingCentralOwnerCredentials } from "./types.js";
 
-export const DEFAULT_HISTORY_MESSAGE_LIMIT = 250;
 export const MAX_HISTORY_MESSAGE_LIMIT = 1000;
-export const DEFAULT_ATTACHMENT_MAX_COUNT = 5;
-export const DEFAULT_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 export const MAX_ATTACHMENT_MAX_COUNT = 20;
 export const MAX_ATTACHMENT_MAX_BYTES = 100 * 1024 * 1024;
 
-const DEFAULT_PROCESSING_PLACEHOLDER: Required<ProcessingPlaceholderConfig> = {
+const DEFAULT_PROCESSING_PLACEHOLDER = {
   enabled: false,
   initialText: "👀",
   delayedText: "⏳",
   editDelaySeconds: 2,
 };
 
+const DEFAULT_ATTACHMENTS = {
+  enabled: true,
+  maxCount: 5,
+  maxBytes: 5 * 1024 * 1024,
+};
+
+/** 旧配置字段迁移指引（hermes/openclaw 兼容） */
 const LEGACY_CONFIG_FIELDS: Record<string, string> = {
   allowedUserEmails: "allowFrom",
   allowAllUsers: 'dmPolicy: "open" with allowFrom: ["*"]',
@@ -38,15 +38,16 @@ const LEGACY_CONFIG_FIELDS: Record<string, string> = {
   groups: "teams",
 };
 
+/** 旧环境变量迁移指引：行为配置已收敛到 cordis 配置树（可用 ${VAR} 插值注入） */
 const LEGACY_ENV_FIELDS: Record<string, string> = {
-  RC_ALLOWED_USER_EMAILS: "RC_ALLOW_FROM",
-  RC_ALLOW_ALL_USERS: 'RC_DM_POLICY=open and RC_ALLOW_FROM="*"',
-  RC_ALLOWED_CHANNELS: "RC_TEAMS",
-  RC_IGNORED_CHANNELS: "RC_TEAMS",
-  RC_FREE_RESPONSE_CHANNELS: "RC_TEAMS",
+  RC_ALLOWED_USER_EMAILS: "config allowFrom",
+  RC_ALLOW_ALL_USERS: 'config dmPolicy="open" + allowFrom=["*"]',
+  RC_ALLOWED_CHANNELS: "config teams",
+  RC_IGNORED_CHANNELS: "config teams",
+  RC_FREE_RESPONSE_CHANNELS: 'config teams.<chatId>.requireMention=false',
 };
 
-function readEnv(name: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
+function readEnv(name: string, env: NodeJS.ProcessEnv): string | undefined {
   const value = env[name];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
@@ -58,91 +59,18 @@ function cleanEnvPlaceholder(value: string | undefined): string | undefined {
   return value;
 }
 
-function readBoolean(
-  value: unknown,
-  fallback: boolean,
-  envName?: string,
-  env: NodeJS.ProcessEnv = process.env,
-): boolean {
-  const raw = value ?? (envName ? readEnv(envName, env) : undefined);
-  if (raw === undefined || raw === null || raw === "") {
-    return fallback;
-  }
-  if (typeof raw === "boolean") {
-    return raw;
-  }
-  return ["1", "true", "yes", "on"].includes(String(raw).trim().toLowerCase());
-}
-
-function readNumber(
-  value: unknown,
-  fallback: number,
-  envName?: string,
-  env: NodeJS.ProcessEnv = process.env,
-): number {
-  const raw = value ?? (envName ? readEnv(envName, env) : undefined);
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 function clampInteger(value: number, min: number, max: number): number {
   return Math.min(Math.max(Math.trunc(value), min), max);
 }
 
-function readDelimitedEntries(
-  value: unknown,
-  envName?: string,
-  env: NodeJS.ProcessEnv = process.env,
-): string[] {
-  const raw = value ?? (envName ? readEnv(envName, env) : undefined);
-  if (Array.isArray(raw)) {
-    return raw.map((entry) => String(entry).trim()).filter(Boolean);
-  }
-  if (typeof raw !== "string") {
-    return [];
-  }
-  return raw
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
-function normalizeAllowFrom(entries: Array<string | number> | string[]): string[] {
+function normalizeAllowFrom(entries: Array<string | number>): string[] {
   return Array.from(new Set(entries.map((entry) => String(entry).trim()).filter(Boolean)));
 }
 
-function readPolicy<T extends string>(
-  value: unknown,
-  envName: string,
-  env: NodeJS.ProcessEnv,
-  fallback: T,
-  allowed: readonly T[],
-): T {
-  const raw = String(value ?? readEnv(envName, env) ?? fallback).trim();
-  return (allowed as readonly string[]).includes(raw) ? (raw as T) : fallback;
-}
-
-function readRecordEnv<T extends Record<string, unknown>>(
-  envName: string,
-  env: NodeJS.ProcessEnv,
-): T | undefined {
-  const raw = readEnv(envName, env);
-  if (!raw) {
-    return undefined;
-  }
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as T)
-      : undefined;
-  } catch {
-    throw new Error(envName + " must be a JSON object.");
-  }
-}
-
-function assertNoLegacyConfig(cfg: RingCentralConfig): void {
+function assertNoLegacyConfig(cfg: ImRingCentralConfig | undefined): void {
+  const record = (cfg ?? {}) as unknown as Record<string, unknown>;
   for (const [field, replacement] of Object.entries(LEGACY_CONFIG_FIELDS)) {
-    if (Object.prototype.hasOwnProperty.call(cfg, field)) {
+    if (Object.prototype.hasOwnProperty.call(record, field)) {
       throw new Error(
         'Legacy RingCentral config field "' + field + '" is no longer supported. Use "' + replacement + '" instead.',
       );
@@ -153,178 +81,103 @@ function assertNoLegacyConfig(cfg: RingCentralConfig): void {
 function assertNoLegacyEnv(env: NodeJS.ProcessEnv): void {
   for (const [name, replacement] of Object.entries(LEGACY_ENV_FIELDS)) {
     if (readEnv(name, env) !== undefined) {
-      throw new Error('Legacy RingCentral env "' + name + '" is no longer supported. Use "' + replacement + '" instead.');
+      throw new Error(
+        'Legacy RingCentral env "' + name + '" is no longer supported. Use "' + replacement + '" instead.',
+      );
     }
   }
 }
 
-function resolveTeams(
-  cfg: RingCentralConfig,
-  env: NodeJS.ProcessEnv,
-): Record<string, RingCentralTeamConfig> | undefined {
-  const envTeams = readRecordEnv<Record<string, RingCentralTeamConfig>>("RC_TEAMS", env);
-  const teams = cfg.teams ?? envTeams;
-  const teamRequireMention = readEnv("RC_TEAM_REQUIRE_MENTION", env);
-  if (teamRequireMention === undefined) {
-    return teams;
-  }
-  return {
-    ...(teams ?? {}),
-    "*": {
-      ...(teams?.["*"] ?? {}),
-      requireMention: readBoolean(undefined, true, "RC_TEAM_REQUIRE_MENTION", env),
-    },
-  };
-}
-
-function resolveGroupDmChannels(
-  cfg: RingCentralConfig,
-  env: NodeJS.ProcessEnv,
-): Record<string, RingCentralGroupDmConfig> {
-  return cfg.groupDmChannels ?? readRecordEnv<Record<string, RingCentralGroupDmConfig>>("RC_GROUP_DM_CHANNELS", env) ?? {};
-}
-
 function resolveOwnerCredentials(
-  cfg: RingCentralConfig,
+  source: OwnerCredentialsConfig | undefined,
   env: NodeJS.ProcessEnv,
 ): ResolvedRingCentralOwnerCredentials | undefined {
-  const source: RingCentralOwnerCredentials | undefined = cfg.ownerCredentials;
   const clientId = cleanEnvPlaceholder(source?.clientId) ?? readEnv("RC_USER_CLIENT_ID", env);
   const clientSecret = cleanEnvPlaceholder(source?.clientSecret) ?? readEnv("RC_USER_CLIENT_SECRET", env);
   const jwt = cleanEnvPlaceholder(source?.jwt) ?? readEnv("RC_USER_JWT_TOKEN", env);
   return clientId && clientSecret && jwt ? { clientId, clientSecret, jwt } : undefined;
 }
 
-function resolveReplyToMode(raw: unknown, env: NodeJS.ProcessEnv): RingCentralReplyToMode {
-  const mode = String(raw ?? readEnv("RC_REPLY_TO_MODE", env) ?? "first").trim().toLowerCase();
-  return mode === "off" || mode === "all" || mode === "first" ? mode : "first";
-}
-
-function resolveProcessingPlaceholder(
-  cfg: RingCentralConfig,
-  env: NodeJS.ProcessEnv,
-): Required<ProcessingPlaceholderConfig> {
-  const placeholder = cfg.processingPlaceholder ?? {};
-  return {
-    enabled: readBoolean(
-      placeholder.enabled,
-      DEFAULT_PROCESSING_PLACEHOLDER.enabled,
-      "RC_PROCESSING_EMOJI_ENABLED",
-      env,
-    ),
-    initialText: placeholder.initialText ?? DEFAULT_PROCESSING_PLACEHOLDER.initialText,
-    delayedText: placeholder.delayedText ?? DEFAULT_PROCESSING_PLACEHOLDER.delayedText,
-    editDelaySeconds: clampInteger(
-      readNumber(
-        placeholder.editDelaySeconds,
-        DEFAULT_PROCESSING_PLACEHOLDER.editDelaySeconds,
-        "RC_PROCESSING_EMOJI_EDIT_DELAY_SECONDS",
-        env,
-      ),
-      0,
-      60,
-    ),
-  };
-}
-
-function resolveAttachmentDownloads(
-  cfg: RingCentralConfig,
-  env: NodeJS.ProcessEnv,
-): ResolvedAccount["attachments"] {
-  const attachments = cfg.attachments ?? {};
-  return {
-    enabled: readBoolean(attachments.enabled, true, "RC_ATTACHMENT_DOWNLOAD_ENABLED", env),
-    maxCount: clampInteger(
-      readNumber(attachments.maxCount, DEFAULT_ATTACHMENT_MAX_COUNT, "RC_ATTACHMENT_MAX_COUNT", env),
-      0,
-      MAX_ATTACHMENT_MAX_COUNT,
-    ),
-    maxBytes: clampInteger(
-      readNumber(attachments.maxBytes, DEFAULT_ATTACHMENT_MAX_BYTES, "RC_ATTACHMENT_MAX_BYTES", env),
-      1,
-      MAX_ATTACHMENT_MAX_BYTES,
-    ),
-  };
-}
-
 /**
- * Resolve the effective RingCentral account from plugin config + RC_* env vars.
- * Throws with a clear message when the bot token is missing.
+ * 解析运行时账号视图。
+ *
+ * - botToken / server / ownerCredentials：配置优先，其次环境变量（密钥类）
+ * - 其余行为配置：配置单一来源，这里只补运行时兜底默认值与数值钳制
  */
 export function resolveAccount(
-  channelConfig: RingCentralConfig | undefined,
+  raw: ImRingCentralConfig | undefined,
   env: NodeJS.ProcessEnv = process.env,
 ): ResolvedAccount {
-  const cfg = channelConfig ?? {};
-  assertNoLegacyConfig(cfg);
+  assertNoLegacyConfig(raw);
   assertNoLegacyEnv(env);
-  const botToken = cleanEnvPlaceholder(cfg.botToken) ?? readEnv("RC_BOT_TOKEN", env) ?? "";
+
+  const botToken = cleanEnvPlaceholder(raw?.botToken) ?? readEnv("RC_BOT_TOKEN", env);
   if (!botToken) {
     throw new Error("RingCentral bot token not configured. Set botToken in config or RC_BOT_TOKEN.");
   }
 
-  const ownerCredentials = resolveOwnerCredentials(cfg, env);
-  const allowFrom = normalizeAllowFrom(
-    cfg.allowFrom ?? readDelimitedEntries(undefined, "RC_ALLOW_FROM", env),
-  );
-  const dmPolicy = readPolicy<RingCentralDmPolicy>(
-    cfg.dmPolicy,
-    "RC_DM_POLICY",
-    env,
-    "pairing",
-    ["disabled", "allowlist", "pairing", "open"],
-  );
+  const server = cleanEnvPlaceholder(raw?.server) ?? readEnv("RC_SERVER_URL", env) ?? DEFAULT_SERVER;
+  const ownerCredentials = resolveOwnerCredentials(raw?.ownerCredentials, env);
+
+  const allowFrom = normalizeAllowFrom(raw?.allowFrom ?? []);
+  const dmPolicy = raw?.dmPolicy ?? "pairing";
   if (dmPolicy === "open" && !allowFrom.includes("*")) {
     throw new Error('RingCentral dmPolicy="open" requires allowFrom to include "*".');
   }
-  const groupPolicy = readPolicy<RingCentralGroupPolicy>(
-    cfg.groupPolicy,
-    "RC_GROUP_POLICY",
-    env,
-    "disabled",
-    ["disabled", "allowlist", "open"],
-  );
 
-  const historyMessageLimit = clampInteger(
-    readNumber(cfg.historyMessageLimit, DEFAULT_HISTORY_MESSAGE_LIMIT, "RC_HISTORY_MESSAGE_LIMIT", env),
-    1,
-    MAX_HISTORY_MESSAGE_LIMIT,
-  );
-  const requireMentionEnv = readEnv("RC_REQUIRE_MENTION", env);
-  const requireMention = readBoolean(cfg.requireMention, true, "RC_REQUIRE_MENTION", env);
+  const placeholder = raw?.processingPlaceholder;
+  const attachments = raw?.attachments;
 
-  return {
+  const config: ImRingCentralConfig = {
+    ...(raw ?? {}),
     botToken,
-    ownerCredentials,
-    server: cleanEnvPlaceholder(cfg.server) ?? readEnv("RC_SERVER_URL", env) ?? DEFAULT_SERVER,
-    allowFrom,
-    dangerouslyAllowEmailMatching: readBoolean(cfg.dangerouslyAllowEmailMatching, false, undefined, env),
-    groupDmEnabled: readBoolean(cfg.groupDmEnabled, false, "RC_GROUP_DM_ENABLED", env),
-    groupDmChannels: resolveGroupDmChannels(cfg, env),
-    noThreadChannels: readDelimitedEntries(cfg.noThreadChannels, "RC_NO_THREAD_CHANNELS", env),
-    replyToMode: resolveReplyToMode(cfg.replyToMode, env),
-    requireMention,
-    requireMentionExplicit: cfg.requireMention !== undefined || requireMentionEnv !== undefined,
-    threadRequireMention: readBoolean(cfg.threadRequireMention, true, "RC_THREAD_REQUIRE_MENTION", env),
-    groupPolicy,
+    server,
+    ownerCredentials: raw?.ownerCredentials ?? { clientId: "", clientSecret: "", jwt: "" },
+    botExtensionId: raw?.botExtensionId ?? "",
     dmPolicy,
-    textChunkLimit: cfg.textChunkLimit,
-    processingPlaceholder: resolveProcessingPlaceholder(cfg, env),
-    attachments: resolveAttachmentDownloads(cfg, env),
-    debugInboundMessages: readBoolean(cfg.debugInboundMessages, false, "RC_DEBUG_INBOUND_MESSAGES", env),
-    historyMessageLimit,
-    homeChannel: cleanEnvPlaceholder(cfg.homeChannel) ?? readEnv("RC_HOME_CHANNEL", env),
-    homeChannelName: cleanEnvPlaceholder(cfg.homeChannelName) ?? readEnv("RC_HOME_CHANNEL_NAME", env),
-    config: { ...cfg, teams: resolveTeams(cfg, env) },
+    allowFrom,
+    dangerouslyAllowEmailMatching: raw?.dangerouslyAllowEmailMatching ?? false,
+    groupPolicy: raw?.groupPolicy ?? "disabled",
+    teams: raw?.teams ?? {},
+    groupDmEnabled: raw?.groupDmEnabled ?? false,
+    groupDmChannels: raw?.groupDmChannels ?? {},
+    threadRequireMention: raw?.threadRequireMention ?? true,
+    noThreadChannels: raw?.noThreadChannels ?? [],
+    replyToMode: raw?.replyToMode ?? "first",
+    processingPlaceholder: {
+      enabled: placeholder?.enabled ?? DEFAULT_PROCESSING_PLACEHOLDER.enabled,
+      initialText: placeholder?.initialText ?? DEFAULT_PROCESSING_PLACEHOLDER.initialText,
+      delayedText: placeholder?.delayedText ?? DEFAULT_PROCESSING_PLACEHOLDER.delayedText,
+      editDelaySeconds: clampInteger(
+        placeholder?.editDelaySeconds ?? DEFAULT_PROCESSING_PLACEHOLDER.editDelaySeconds,
+        0,
+        60,
+      ),
+    },
+    attachments: {
+      enabled: attachments?.enabled ?? DEFAULT_ATTACHMENTS.enabled,
+      maxCount: clampInteger(attachments?.maxCount ?? DEFAULT_ATTACHMENTS.maxCount, 0, MAX_ATTACHMENT_MAX_COUNT),
+      maxBytes: clampInteger(attachments?.maxBytes ?? DEFAULT_ATTACHMENTS.maxBytes, 1, MAX_ATTACHMENT_MAX_BYTES),
+    },
+    debugInboundMessages: raw?.debugInboundMessages ?? false,
+    historyMessageLimit: clampInteger(raw?.historyMessageLimit ?? 250, 1, MAX_HISTORY_MESSAGE_LIMIT),
+    homeChannel: raw?.homeChannel ?? "",
+    requireMention: raw?.requireMention ?? true,
+    textChunkLimit: raw?.textChunkLimit ?? 4000,
+    allowBots: raw?.allowBots ?? false,
+    sessionIdleTimeout: raw?.sessionIdleTimeout ?? 30 * 60 * 1000,
+    showToolResults: raw?.showToolResults ?? false,
+    debug: raw?.debug ?? false,
   };
+
+  return { botToken, server, ownerCredentials, config };
 }
 
 export function isAccountConfigured(
-  channelConfig: RingCentralConfig | undefined,
+  config: ImRingCentralConfig | undefined,
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  const cfg = channelConfig ?? {};
-  return !!(cfg.botToken ?? readEnv("RC_BOT_TOKEN", env));
+  return !!(cleanEnvPlaceholder(config?.botToken) ?? readEnv("RC_BOT_TOKEN", env));
 }
 
 export function hasOwnerCredentials(account: ResolvedAccount): boolean {

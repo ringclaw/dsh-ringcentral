@@ -2,14 +2,17 @@
 #
 # 运行: dsh --config ./cordis.yml
 #
-# 环境变量:
+# 密钥类环境变量（插件直接读取的只有这些）:
 #   RC_BOT_TOKEN        - RingCentral Bot 静态 JWT（必填）
 #   RC_SERVER_URL       - RingCentral API 服务器（可选，默认 production）
 #   RC_USER_CLIENT_ID / RC_USER_CLIENT_SECRET / RC_USER_JWT_TOKEN
 #                       - 可选 owner JWT，启用 ringcentral_get_recent_messages
 #                         历史工具与出站回退
-#   DEEPSEEK_API_KEY    - DeepSeek API Key
-#   DSH_CWD             - Agent 工作目录（可选）
+#   DEEPSEEK_API_KEY    - DeepSeek API Key（LLM 适配器）
+#
+# 行为配置全部来自本配置树（Schema 默认值见 src/config.ts）；需要环境变量
+# 驱动的行为配置，用 ${VAR} 插值即可，例如：
+#   dmPolicy: ${RC_DM_POLICY:-pairing}
 
 # ── 核心 spine ──
 - id: sessions
@@ -56,24 +59,18 @@
   config:
     root: ./.dsh-sessions
 
-# ── RingCentral IM 驱动 ──
+# ── RingCentral IM 驱动（只写与默认值不同的项） ──
 - id: im-ringcentral
   name: 'dsh-ringcentral'
   config:
     botToken: ${RC_BOT_TOKEN}
     server: ${RC_SERVER_URL:-https://platform.ringcentral.com}
-    dmPolicy: pairing
     groupPolicy: allowlist
     teams:
       '*':
         requireMention: true
     threadRequireMention: false
-    replyToMode: first
     processingPlaceholder:
       enabled: true
     provider: deepseek
     model: deepseek-chat
-    cwd: ${DSH_CWD:-/tmp/dsh-ringcentral}
-    textChunkLimit: 4000
-    sessionIdleTimeout: 1800000
-    debug: false

@@ -36,7 +36,7 @@ interface NormalizedAttachment {
 export async function resolveInboundAttachmentsForAgent(
   opts: ResolveInboundAttachmentsOptions,
 ): Promise<DownloadedAttachmentFile[]> {
-  const cfg = opts.account.attachments;
+  const cfg = opts.account.config.attachments;
   if (!cfg.enabled || cfg.maxCount <= 0 || !opts.attachments?.length) {
     return [];
   }

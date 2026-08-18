@@ -3,12 +3,11 @@
 # 当本包通过 dsh plugin --profile <name> add dsh-ringcentral 安装后，
 # dsh 启动时自动加载此 patch。
 #
-# 环境变量：
-#   RC_BOT_TOKEN - RingCentral Bot 静态 JWT（必填）
-#   RC_SERVER_URL - RingCentral API 服务器（可选）
-#   RC_USER_CLIENT_ID / RC_USER_CLIENT_SECRET / RC_USER_JWT_TOKEN - owner JWT（可选）
-#
 # 叠加顺序：dsh-base → 本 bundle patch → profile cordis.patch.yml → --patch
+#
+# 行为配置遵循 dsh 最佳实践：这里只放密钥占位（__FROM_ENV__），其余全部走
+# Config Schema 默认值；需要自定义时在 profile 自己的 cordis.patch.yml 覆盖
+# 对应条目（支持 ${VAR} 环境变量插值）。
 
 # ── 插入 im-ringcentral 插件行 ──
 - insert:
@@ -21,24 +20,3 @@
           clientId: __FROM_ENV__
           clientSecret: __FROM_ENV__
           jwt: __FROM_ENV__
-        # provider/model 留空：从宿主默认模型路由继承
-        # 用户可通过 /model 命令在聊天中切换
-        dmPolicy: pairing
-        allowFrom: []
-        groupPolicy: disabled
-        teams: {}
-        groupDmEnabled: false
-        groupDmChannels: {}
-        threadRequireMention: true
-        noThreadChannels: []
-        replyToMode: first
-        processingPlaceholder:
-          enabled: false
-        attachments:
-          enabled: true
-          maxCount: 5
-          maxBytes: 5242880
-        textChunkLimit: 4000
-        sessionIdleTimeout: 1800000
-        showToolResults: false
-        debug: false

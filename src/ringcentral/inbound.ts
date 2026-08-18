@@ -96,7 +96,7 @@ export async function handleInboundPost(inCtx: InboundContext): Promise<InboundD
     return { admitted: false, reason: "self-echo" };
   }
 
-  if (account.debugInboundMessages) {
+  if (account.config.debugInboundMessages) {
     log(
       "[ringcentral] inbound message " + JSON.stringify({
         chatId,
@@ -116,7 +116,7 @@ export async function handleInboundPost(inCtx: InboundContext): Promise<InboundD
 
   // ── 线程跟进判定 ──
   const threadFollowup = isTrackedThreadFollowup(post, tracker);
-  if (account.debugInboundMessages && (post.parentPostId || post.threadId)) {
+  if (account.config.debugInboundMessages && (post.parentPostId || post.threadId)) {
     log(
       "[ringcentral] threadFollowup check postId=" + post.id + " parentPostId=" + (post.parentPostId ?? "null") +
         " threadId=" + (post.threadId ?? "null") + " threadFollowup=" + threadFollowup,
@@ -189,7 +189,7 @@ async function decideAdmission(params: {
   const { account, accountKey, pairing } = inCtx;
 
   if (surface.kind === "direct") {
-    switch (account.dmPolicy) {
+    switch (account.config.dmPolicy) {
       case "disabled":
         return { admitted: false, reason: "dm policy disabled" };
       case "open":
@@ -211,7 +211,7 @@ async function decideAdmission(params: {
   }
 
   if (surface.kind === "group-dm") {
-    if (!account.groupDmEnabled) {
+    if (!account.config.groupDmEnabled) {
       return { admitted: false, reason: "group dm disabled" };
     }
     if (!surface.settings || surface.settings.allow === false) {
@@ -229,7 +229,7 @@ async function decideAdmission(params: {
 
   // team / channel
   const explicitTeamConfig = account.config.teams?.[chatId];
-  switch (account.groupPolicy) {
+  switch (account.config.groupPolicy) {
     case "disabled":
       return { admitted: false, reason: "team policy disabled" };
     case "allowlist":
@@ -275,11 +275,11 @@ function admit(params: {
 
 /** allowlist 匹配：person id 精确匹配；dangerouslyAllowEmailMatching 时允许 email 别名 */
 async function matchesAllowFrom(inCtx: InboundContext, senderId: string): Promise<boolean> {
-  const allowFrom = inCtx.account.allowFrom;
+  const allowFrom = inCtx.account.config.allowFrom;
   if (allowFrom.includes("*")) return true;
   if (allowFrom.includes(senderId)) return true;
 
-  if (inCtx.account.dangerouslyAllowEmailMatching && inCtx.getPersonInfo) {
+  if (inCtx.account.config.dangerouslyAllowEmailMatching && inCtx.getPersonInfo) {
     const person = await resolvePersonInfo(inCtx, senderId);
     const email = person?.email?.trim().toLowerCase();
     if (email && allowFrom.some((entry) => String(entry).trim().toLowerCase() === email)) {
@@ -315,7 +315,7 @@ function classifyChatSurface(
     kind: "group-dm",
     chatType: "group",
     targetKind: "group",
-    settings: account.groupDmChannels[chatId],
+    settings: account.config.groupDmChannels[chatId],
   };
 }
 
@@ -412,16 +412,14 @@ function resolveRequireMention(params: {
   if (params.surface.kind === "direct") {
     return false;
   }
-  if (params.threadFollowup && !params.account.threadRequireMention) {
+  if (params.threadFollowup && !params.account.config.threadRequireMention) {
     return false;
   }
+  // per-chat 显式设置 > 全局 requireMention（Team/Everyone 与 Group DM 共用）
   if (params.surfaceRequireMention !== undefined) {
     return params.surfaceRequireMention;
   }
-  if (params.account.requireMentionExplicit) {
-    return params.account.requireMention;
-  }
-  return params.surface.kind === "team";
+  return params.account.config.requireMention;
 }
 
 // ── body 组装 ──

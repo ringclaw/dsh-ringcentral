@@ -84,22 +84,27 @@ client (chats the bot is a member of).
 
 ## Configuration
 
-The plugin reads its config from the dsh profile (see `cordis.patch.yml`)
-with `RC_*` environment variables as overrides.
+Config follows dsh practice: **the cordis config tree is the single source**
+(profile `cordis.patch.yml` / `cordis.yml`), with Schema defaults applied
+automatically. The plugin reads environment variables directly only for
+secrets: `RC_BOT_TOKEN`, `RC_SERVER_URL`, `RC_USER_CLIENT_ID`,
+`RC_USER_CLIENT_SECRET`, `RC_USER_JWT_TOKEN`. To drive any other setting
+from an environment variable, use cordis `${VAR}` interpolation in your
+config, e.g. `dmPolicy: ${RC_DM_POLICY:-pairing}`.
 
 | Config | Type | Default | Description |
 | --- | --- | --- | --- |
-| `botToken` | string | **required** | Bot static JWT (or `RC_BOT_TOKEN`) |
-| `ownerCredentials.clientId` / `clientSecret` / `jwt` | string | - | Owner JWT (or `RC_USER_CLIENT_ID` / `RC_USER_CLIENT_SECRET` / `RC_USER_JWT_TOKEN`) |
-| `server` | string | `https://platform.ringcentral.com` | API server (or `RC_SERVER_URL`) |
+| `botToken` | string | **required** | Bot static JWT (env: `RC_BOT_TOKEN`) |
+| `ownerCredentials.clientId` / `clientSecret` / `jwt` | string | - | Owner JWT (env: `RC_USER_*`) |
+| `server` | string | `https://platform.ringcentral.com` | API server (env: `RC_SERVER_URL`) |
 | `botExtensionId` | string | auto-detected | Bot person id for mention/self-echo detection |
 | `dmPolicy` | enum | `pairing` | DM handling: `disabled`, `allowlist`, `pairing`, `open` |
-| `allowFrom` | string[] | `[]` | Stable person ids allowed in DMs (or `RC_ALLOW_FROM`); `open` requires `["*"]` |
+| `allowFrom` | string[] | `[]` | Stable person ids allowed in DMs; `open` requires `["*"]` |
 | `dangerouslyAllowEmailMatching` | boolean | `false` | Match `allowFrom` against email aliases |
 | `groupPolicy` | enum | `disabled` | Team/Everyone handling: `disabled`, `allowlist`, `open` |
-| `teams` | map | `{}` | Per-chat Team config: `allow`, `requireMention`, `systemPrompt`, `users` (or `RC_TEAMS` JSON) |
-| `groupDmEnabled` | boolean | `false` | Enable Group DM conversations (or `RC_GROUP_DM_ENABLED`) |
-| `groupDmChannels` | map | `{}` | Per-chat Group DM allowlist (or `RC_GROUP_DM_CHANNELS` JSON) |
+| `teams` | map | `{}` | Per-chat Team config: `allow`, `requireMention`, `systemPrompt`, `users` |
+| `groupDmEnabled` | boolean | `false` | Enable Group DM conversations |
+| `groupDmChannels` | map | `{}` | Per-chat Group DM allowlist |
 | `threadRequireMention` | boolean | `true` | Require mention for thread follow-ups |
 | `noThreadChannels` | string[] | `[]` | Chat ids where replies are unthreaded |
 | `replyToMode` | enum | `first` | `off`, `first`, or `all` |
@@ -107,8 +112,8 @@ with `RC_*` environment variables as overrides.
 | `processingPlaceholder.editDelaySeconds` | number | `2` | Delay before `👀` becomes `⏳` |
 | `attachments.enabled` / `maxCount` / `maxBytes` | - | `true` / `5` / `5242880` | Inbound attachment download |
 | `historyMessageLimit` | number | `250` | Default record count for the history tool |
-| `homeChannel` / `homeChannelName` | string | - | Fallback target for the history tool |
-| `requireMention` | boolean | `true` | Global Team/Everyone mention gate |
+| `homeChannel` | string | - | Fallback target for the history tool |
+| `requireMention` | boolean | `true` | Global mention gate for Team/Everyone **and Group DM** (per-chat `requireMention` overrides) |
 | `textChunkLimit` | number | `4000` | Max chars per outgoing post |
 | `allowBots` | boolean | `false` | Admit bot-authored inbound posts |
 | `provider` / `model` | string | host default | LLM route (fallback chain: per-peer prefs → config → settings.yaml → host) |
@@ -185,7 +190,7 @@ absolute path and writes the gitignored `cordis.local.yml`.
 | DM ignored | `dmPolicy` or pairing already claimed | Check `dmPolicy` / `allowFrom`; pairing is claimed by the first DM sender |
 | History tool returns nothing | Chat not visible to bot or owner | Reads try the bot first, then the owner; pass a bare chat id or `channel:<chatId>` and make sure one client is a member |
 | Replies not threaded | `replyToMode: off` or `noThreadChannels` | Check `replyToMode` and `noThreadChannels` |
-| Legacy env rejected | `RC_ALLOWED_USER_EMAILS` etc. | Use `RC_ALLOW_FROM` / `RC_TEAMS` (see migration errors in logs) |
+| Legacy env rejected | `RC_ALLOWED_USER_EMAILS` etc. | Behavioral config lives in the cordis config tree now — use `allowFrom` / `teams` (see migration errors in logs) |
 
 ## License
 
