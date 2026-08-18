@@ -55,27 +55,22 @@ describe("resolveAccount — 密钥类（配置优先，其次环境变量）", 
 describe("resolveAccount — 行为配置单一来源（config），默认值与钳制", () => {
   it("applies defaults to account.config", () => {
     const cfg = resolveAccount(partial(), {}).config;
-    expect(cfg.dmPolicy).toBe("pairing");
-    expect(cfg.groupPolicy).toBe("disabled");
+    expect(cfg.access).toEqual({ dmMode: "open", dmAllow: [], groupMode: "open", groupAllow: [] });
     expect(cfg.replyToMode).toBe("first");
     expect(cfg.requireMention).toBe(true);
     expect(cfg.threadRequireMention).toBe(true);
     expect(cfg.attachments).toEqual({ enabled: true, maxCount: 5, maxBytes: 5 * 1024 * 1024 });
     expect(cfg.processingPlaceholder).toEqual({ enabled: false, initialText: "👀", delayedText: "⏳", editDelaySeconds: 2 });
-    expect(cfg.teams).toEqual({});
-    expect(cfg.groupDmChannels).toEqual({});
     expect(cfg.homeChannel).toBe("");
   });
 
   it("passes config values through", () => {
     const cfg = resolveAccount(
       partial({
-        dmPolicy: "allowlist",
-        allowFrom: [123, "456", 123],
-        groupPolicy: "open",
-        teams: { "*": { requireMention: false }, g1: { allow: true } },
-        groupDmEnabled: true,
-        groupDmChannels: { g2: { allow: true } },
+        access: { dmMode: "allowlist", dmAllow: ["123", "456"], groupMode: "open", groupAllow: ["g1"] },
+        requireMention: false,
+        groupPrompt: "你是团队客服",
+        directPrompt: "你是私人助理",
         noThreadChannels: ["g1"],
         replyToMode: "all",
         homeChannel: "home-1",
@@ -83,11 +78,10 @@ describe("resolveAccount — 行为配置单一来源（config），默认值与
       }),
       {},
     ).config;
-    expect(cfg.dmPolicy).toBe("allowlist");
-    expect(cfg.allowFrom).toEqual(["123", "456"]); // 去重 + 归一化为 string
-    expect(cfg.groupPolicy).toBe("open");
-    expect(cfg.teams["g1"]).toEqual({ allow: true });
-    expect(cfg.groupDmChannels["g2"]).toEqual({ allow: true });
+    expect(cfg.access).toEqual({ dmMode: "allowlist", dmAllow: ["123", "456"], groupMode: "open", groupAllow: ["g1"] });
+    expect(cfg.requireMention).toBe(false);
+    expect(cfg.groupPrompt).toBe("你是团队客服");
+    expect(cfg.directPrompt).toBe("你是私人助理");
     expect(cfg.noThreadChannels).toEqual(["g1"]);
     expect(cfg.replyToMode).toBe("all");
     expect(cfg.homeChannel).toBe("home-1");
@@ -113,15 +107,14 @@ describe("resolveAccount — 行为配置单一来源（config），默认值与
       partial(),
       env({ RC_DM_POLICY: "allowlist", RC_GROUP_POLICY: "open", RC_REPLY_TO_MODE: "off", RC_REQUIRE_MENTION: "false" }),
     ).config;
-    expect(cfg.dmPolicy).toBe("pairing");
-    expect(cfg.groupPolicy).toBe("disabled");
+    expect(cfg.access).toEqual({ dmMode: "open", dmAllow: [], groupMode: "open", groupAllow: [] });
     expect(cfg.replyToMode).toBe("first");
     expect(cfg.requireMention).toBe(true);
   });
 
-  it("dmPolicy open requires allowFrom *", () => {
-    expect(() => resolveAccount(partial({ dmPolicy: "open" }), {})).toThrow(/allowFrom/);
-    expect(resolveAccount(partial({ dmPolicy: "open", allowFrom: ["*"] }), {}).config.dmPolicy).toBe("open");
+  it("merges partial access block with defaults", () => {
+    const cfg = resolveAccount(partial({ access: { dmMode: "allowlist" } }), {}).config;
+    expect(cfg.access).toEqual({ dmMode: "allowlist", dmAllow: [], groupMode: "open", groupAllow: [] });
   });
 });
 

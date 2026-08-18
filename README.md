@@ -90,7 +90,11 @@ automatically. The plugin reads environment variables directly only for
 secrets: `RC_BOT_TOKEN`, `RC_SERVER_URL`, `RC_USER_CLIENT_ID`,
 `RC_USER_CLIENT_SECRET`, `RC_USER_JWT_TOKEN`. To drive any other setting
 from an environment variable, use cordis `${VAR}` interpolation in your
-config, e.g. `dmPolicy: ${RC_DM_POLICY:-pairing}`.
+config, e.g. `access.groupMode: ${RC_GROUP_MODE:-open}`.
+
+The access-control block mirrors `@tencent-connect/dsh-qqbot` exactly
+(QQ's `c2c` surface is `dm` here). RingCentral's three non-DM chat types
+(Team / Everyone / Group) are all governed by the `group` surface.
 
 | Config | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -98,13 +102,13 @@ config, e.g. `dmPolicy: ${RC_DM_POLICY:-pairing}`.
 | `ownerCredentials.clientId` / `clientSecret` / `jwt` | string | - | Owner JWT (env: `RC_USER_*`) |
 | `server` | string | `https://platform.ringcentral.com` | API server (env: `RC_SERVER_URL`) |
 | `botExtensionId` | string | auto-detected | Bot person id for mention/self-echo detection |
-| `dmPolicy` | enum | `pairing` | DM handling: `disabled`, `allowlist`, `pairing`, `open` |
-| `allowFrom` | string[] | `[]` | Stable person ids allowed in DMs; `open` requires `["*"]` |
-| `dangerouslyAllowEmailMatching` | boolean | `false` | Match `allowFrom` against email aliases |
-| `groupPolicy` | enum | `disabled` | Team/Everyone handling: `disabled`, `allowlist`, `open` |
-| `teams` | map | `{}` | Per-chat Team config: `allow`, `requireMention`, `systemPrompt`, `users` |
-| `groupDmEnabled` | boolean | `false` | Enable Group DM conversations |
-| `groupDmChannels` | map | `{}` | Per-chat Group DM allowlist |
+| `access.dmMode` | enum | `open` | DM handling: `disabled`, `allowlist`, `open` |
+| `access.dmAllow` | string[] | `[]` | Person ids allowed in DMs; empty or `["*"]` = allow all |
+| `access.groupMode` | enum | `open` | Group handling: `disabled`, `allowlist`, `open` |
+| `access.groupAllow` | string[] | `[]` | Chat ids allowed in groups; empty or `["*"]` = allow all |
+| `requireMention` | boolean | `true` | Require `@`-mention in group chats |
+| `groupPrompt` | string | - | Extra system prompt for group chats |
+| `directPrompt` | string | - | Extra system prompt for DMs |
 | `threadRequireMention` | boolean | `true` | Require mention for thread follow-ups |
 | `noThreadChannels` | string[] | `[]` | Chat ids where replies are unthreaded |
 | `replyToMode` | enum | `first` | `off`, `first`, or `all` |
@@ -113,7 +117,6 @@ config, e.g. `dmPolicy: ${RC_DM_POLICY:-pairing}`.
 | `attachments.enabled` / `maxCount` / `maxBytes` | - | `true` / `5` / `5242880` | Inbound attachment download |
 | `historyMessageLimit` | number | `250` | Default record count for the history tool |
 | `homeChannel` | string | - | Fallback target for the history tool |
-| `requireMention` | boolean | `true` | Global mention gate for Team/Everyone **and Group DM** (per-chat `requireMention` overrides) |
 | `textChunkLimit` | number | `4000` | Max chars per outgoing post |
 | `allowBots` | boolean | `false` | Admit bot-authored inbound posts |
 | `provider` / `model` | string | host default | LLM route (fallback chain: per-peer prefs → config → settings.yaml → host) |
@@ -186,11 +189,11 @@ absolute path and writes the gitignored `cordis.local.yml`.
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | Plugin not starting | `RC_BOT_TOKEN` missing | Set `RC_BOT_TOKEN` or `botToken` in `cordis.patch.yml` |
-| Bot never replies in a Team | `groupPolicy: disabled` or no mention | Allowlist the chat under `teams` and `@`-mention the bot |
-| DM ignored | `dmPolicy` or pairing already claimed | Check `dmPolicy` / `allowFrom`; pairing is claimed by the first DM sender |
+| Bot never replies in a group chat | `access.groupMode: disabled`, not allowlisted, or no mention | Check `access.groupMode` / `access.groupAllow` and `@`-mention the bot |
+| DM ignored | `access.dmMode: disabled` or sender not in `access.dmAllow` | Check `access.dmMode` / `access.dmAllow` |
 | History tool returns nothing | Chat not visible to bot or owner | Reads try the bot first, then the owner; pass a bare chat id or `channel:<chatId>` and make sure one client is a member |
 | Replies not threaded | `replyToMode: off` or `noThreadChannels` | Check `replyToMode` and `noThreadChannels` |
-| Legacy env rejected | `RC_ALLOWED_USER_EMAILS` etc. | Behavioral config lives in the cordis config tree now — use `allowFrom` / `teams` (see migration errors in logs) |
+| Legacy env rejected | `RC_ALLOWED_USER_EMAILS` etc. | Behavioral config lives in the cordis config tree now — use `access.dmAllow` / `access.groupAllow` (see migration errors in logs) |
 
 ## License
 

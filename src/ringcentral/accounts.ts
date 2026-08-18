@@ -30,21 +30,21 @@ const DEFAULT_ATTACHMENTS = {
 
 /** 旧配置字段迁移指引（hermes/openclaw 兼容） */
 const LEGACY_CONFIG_FIELDS: Record<string, string> = {
-  allowedUserEmails: "allowFrom",
-  allowAllUsers: 'dmPolicy: "open" with allowFrom: ["*"]',
-  allowedChannels: "teams",
-  ignoredChannels: "teams",
-  freeResponseChannels: "teams.*.requireMention=false",
-  groups: "teams",
+  allowedUserEmails: "access.dmAllow",
+  allowAllUsers: 'access.dmMode: "open"',
+  allowedChannels: "access.groupAllow",
+  ignoredChannels: "access.groupAllow",
+  freeResponseChannels: "requireMention: false",
+  groups: "access.groupAllow",
 };
 
 /** 旧环境变量迁移指引：行为配置已收敛到 cordis 配置树（可用 ${VAR} 插值注入） */
 const LEGACY_ENV_FIELDS: Record<string, string> = {
-  RC_ALLOWED_USER_EMAILS: "config allowFrom",
-  RC_ALLOW_ALL_USERS: 'config dmPolicy="open" + allowFrom=["*"]',
-  RC_ALLOWED_CHANNELS: "config teams",
-  RC_IGNORED_CHANNELS: "config teams",
-  RC_FREE_RESPONSE_CHANNELS: 'config teams.<chatId>.requireMention=false',
+  RC_ALLOWED_USER_EMAILS: "config access.dmAllow",
+  RC_ALLOW_ALL_USERS: 'config access.dmMode="open"',
+  RC_ALLOWED_CHANNELS: "config access.groupAllow",
+  RC_IGNORED_CHANNELS: "config access.groupAllow",
+  RC_FREE_RESPONSE_CHANNELS: "config requireMention=false",
 };
 
 function readEnv(name: string, env: NodeJS.ProcessEnv): string | undefined {
@@ -61,10 +61,6 @@ function cleanEnvPlaceholder(value: string | undefined): string | undefined {
 
 function clampInteger(value: number, min: number, max: number): number {
   return Math.min(Math.max(Math.trunc(value), min), max);
-}
-
-function normalizeAllowFrom(entries: Array<string | number>): string[] {
-  return Array.from(new Set(entries.map((entry) => String(entry).trim()).filter(Boolean)));
 }
 
 function assertNoLegacyConfig(cfg: ImRingCentralConfig | undefined): void {
@@ -119,11 +115,13 @@ export function resolveAccount(
   const server = cleanEnvPlaceholder(raw?.server) ?? readEnv("RC_SERVER_URL", env) ?? DEFAULT_SERVER;
   const ownerCredentials = resolveOwnerCredentials(raw?.ownerCredentials, env);
 
-  const allowFrom = normalizeAllowFrom(raw?.allowFrom ?? []);
-  const dmPolicy = raw?.dmPolicy ?? "pairing";
-  if (dmPolicy === "open" && !allowFrom.includes("*")) {
-    throw new Error('RingCentral dmPolicy="open" requires allowFrom to include "*".');
-  }
+  const accessRaw = raw?.access;
+  const access: ImRingCentralConfig["access"] = {
+    dmMode: accessRaw?.dmMode ?? "open",
+    dmAllow: [...(accessRaw?.dmAllow ?? [])],
+    groupMode: accessRaw?.groupMode ?? "open",
+    groupAllow: [...(accessRaw?.groupAllow ?? [])],
+  };
 
   const placeholder = raw?.processingPlaceholder;
   const attachments = raw?.attachments;
@@ -134,13 +132,8 @@ export function resolveAccount(
     server,
     ownerCredentials: raw?.ownerCredentials ?? { clientId: "", clientSecret: "", jwt: "" },
     botExtensionId: raw?.botExtensionId ?? "",
-    dmPolicy,
-    allowFrom,
-    dangerouslyAllowEmailMatching: raw?.dangerouslyAllowEmailMatching ?? false,
-    groupPolicy: raw?.groupPolicy ?? "disabled",
-    teams: raw?.teams ?? {},
-    groupDmEnabled: raw?.groupDmEnabled ?? false,
-    groupDmChannels: raw?.groupDmChannels ?? {},
+    access,
+    requireMention: raw?.requireMention ?? true,
     threadRequireMention: raw?.threadRequireMention ?? true,
     noThreadChannels: raw?.noThreadChannels ?? [],
     replyToMode: raw?.replyToMode ?? "first",
@@ -162,7 +155,6 @@ export function resolveAccount(
     debugInboundMessages: raw?.debugInboundMessages ?? false,
     historyMessageLimit: clampInteger(raw?.historyMessageLimit ?? 250, 1, MAX_HISTORY_MESSAGE_LIMIT),
     homeChannel: raw?.homeChannel ?? "",
-    requireMention: raw?.requireMention ?? true,
     textChunkLimit: raw?.textChunkLimit ?? 4000,
     allowBots: raw?.allowBots ?? false,
     sessionIdleTimeout: raw?.sessionIdleTimeout ?? 30 * 60 * 1000,

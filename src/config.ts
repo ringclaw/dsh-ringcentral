@@ -1,17 +1,20 @@
 /**
  * dsh-im-ringcentral 插件配置 Schema
+ *
+ * 访问控制块与 @tencent-connect/dsh-qqbot 形态对齐（唯一差异：c2c → dm）。
  */
 import Schema from '@deepseek-ai/schemastery';
 
-export interface TeamConfig {
-  /** 显式放行该 chat（allowlist 模式） */
-  allow?: boolean;
-  /** 该 chat 是否需要 @bot 触发 */
-  requireMention?: boolean;
-  /** 该 chat 额外 system prompt */
-  systemPrompt?: string;
-  /** 该 chat 允许触发 bot 的用户 person id 列表 */
-  users?: (string | number)[];
+/** 访问控制（对齐 dsh-qqbot 的 access 块；QQ 的 c2c 对应本插件的 dm） */
+export interface AccessControlConfig {
+  /** 私聊访问模式 */
+  dmMode: 'open' | 'allowlist' | 'disabled';
+  /** 私聊白名单（person id；空 = 全部放行） */
+  dmAllow: string[];
+  /** 群聊访问模式（Team/Everyone/Group 统一归入群聊表面） */
+  groupMode: 'open' | 'allowlist' | 'disabled';
+  /** 群聊白名单（chat id；空 = 全部放行） */
+  groupAllow: string[];
 }
 
 export interface OwnerCredentialsConfig {
@@ -46,21 +49,15 @@ export interface ImRingCentralConfig {
   server: string;
   /** Bot person id（缺省自动探测） */
   botExtensionId: string;
-  /** 私聊访问控制 */
-  dmPolicy: 'disabled' | 'allowlist' | 'pairing' | 'open';
-  /** 私聊白名单 */
-  allowFrom: (string | number)[];
-  /** 允许按 email 别名匹配 */
-  dangerouslyAllowEmailMatching: boolean;
-  /** Team/Everyone 访问控制 */
-  groupPolicy: 'disabled' | 'allowlist' | 'open';
-  /** Team 配置表 */
-  teams: Record<string, TeamConfig>;
-  /** 是否启用 Group DM */
-  groupDmEnabled: boolean;
-  /** Group DM 配置表 */
-  groupDmChannels: Record<string, TeamConfig>;
-  /** 线程跟进是否需要 @bot（默认 true） */
+  /** 访问控制 */
+  access: AccessControlConfig;
+  /** 群聊是否需要 @bot 触发 */
+  requireMention: boolean;
+  /** 群聊额外 system prompt */
+  groupPrompt?: string;
+  /** 私聊额外 system prompt */
+  directPrompt?: string;
+  /** 线程跟进是否需要 @bot */
   threadRequireMention: boolean;
   /** 不做线程回复的 chat id 列表 */
   noThreadChannels: string[];
@@ -76,8 +73,6 @@ export interface ImRingCentralConfig {
   historyMessageLimit: number;
   /** 默认 Home chat（历史工具回退目标） */
   homeChannel: string;
-  /** Team/Everyone 与 Group DM 的全局 @bot 门控（per-chat 可覆盖） */
-  requireMention: boolean;
   /** 单条消息最大字符数 */
   textChunkLimit: number;
   /** 允许 bot 身份的入站消息 */
@@ -99,13 +94,6 @@ export interface ImRingCentralConfig {
   debug: boolean;
 }
 
-const teamConfigSchema = Schema.object({
-  allow: Schema.boolean().description('显式放行该 chat'),
-  requireMention: Schema.boolean().description('该 chat 是否需要 @bot 触发'),
-  systemPrompt: Schema.string().description('该 chat 额外 system prompt'),
-  users: Schema.array(Schema.union([Schema.string(), Schema.number()])).description('允许触发 bot 的用户 person id'),
-});
-
 export const ConfigSchema: Schema<ImRingCentralConfig> = Schema.object({
   botToken: Schema.string().default('').description('RingCentral Bot 静态 JWT（或 RC_BOT_TOKEN 环境变量）'),
   ownerCredentials: Schema.object({
@@ -115,13 +103,20 @@ export const ConfigSchema: Schema<ImRingCentralConfig> = Schema.object({
   }).default({ clientId: '', clientSecret: '', jwt: '' }).description('Owner JWT 凭据'),
   server: Schema.string().default('https://platform.ringcentral.com').description('RingCentral API 服务器'),
   botExtensionId: Schema.string().default('').description('Bot person id（缺省自动探测）'),
-  dmPolicy: Schema.union(['disabled', 'allowlist', 'pairing', 'open']).default('pairing').description('私聊访问模式'),
-  allowFrom: Schema.array(Schema.union([Schema.string(), Schema.number()])).default([]).description('私聊白名单（person id）'),
-  dangerouslyAllowEmailMatching: Schema.boolean().default(false).description('允许按 email 别名匹配白名单'),
-  groupPolicy: Schema.union(['disabled', 'allowlist', 'open']).default('disabled').description('Team/Everyone 访问模式'),
-  teams: Schema.dict(teamConfigSchema).default({}).description('Team 配置表'),
-  groupDmEnabled: Schema.boolean().default(false).description('是否启用 Group DM'),
-  groupDmChannels: Schema.dict(teamConfigSchema).default({}).description('Group DM 配置表'),
+  access: Schema.object({
+    dmMode: Schema.union(['open', 'allowlist', 'disabled']).default('open').description('私聊访问模式'),
+    dmAllow: Schema.array(Schema.string()).default([]).description('私聊白名单（person id；空 = 全部放行）'),
+    groupMode: Schema.union(['open', 'allowlist', 'disabled']).default('open').description('群聊访问模式'),
+    groupAllow: Schema.array(Schema.string()).default([]).description('群聊白名单（chat id；空 = 全部放行）'),
+  }).default({
+    dmMode: 'open',
+    dmAllow: [],
+    groupMode: 'open',
+    groupAllow: [],
+  }).description('访问控制'),
+  requireMention: Schema.boolean().default(true).description('群聊是否需要 @bot 触发'),
+  groupPrompt: Schema.string().description('群聊额外 system prompt'),
+  directPrompt: Schema.string().description('私聊额外 system prompt'),
   threadRequireMention: Schema.boolean().default(true).description('线程跟进是否需要 @bot'),
   noThreadChannels: Schema.array(Schema.string()).default([]).description('不做线程回复的 chat id 列表'),
   replyToMode: Schema.union(['off', 'first', 'all']).default('first').description('线程回复模式'),
@@ -139,7 +134,6 @@ export const ConfigSchema: Schema<ImRingCentralConfig> = Schema.object({
   debugInboundMessages: Schema.boolean().default(false).description('入站消息调试日志'),
   historyMessageLimit: Schema.number().default(250).description('历史工具默认条数'),
   homeChannel: Schema.string().default('').description('默认 Home chat id'),
-  requireMention: Schema.boolean().default(true).description('Team/Everyone 与 Group DM 的全局 @bot 门控'),
   textChunkLimit: Schema.number().default(4000).description('单条消息最大字符数'),
   allowBots: Schema.boolean().default(false).description('允许 bot 身份的入站消息'),
 

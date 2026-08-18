@@ -105,13 +105,12 @@ export interface PaginatedRecords<T> {
 
 // Config types — 唯一来源是 Schemastery schema（src/config.ts），这里只做别名，
 // 避免在插件层与 RingCentral 层重复声明同一份配置字段。
-import type { ImRingCentralConfig, TeamConfig, OwnerCredentialsConfig, ProcessingPlaceholderConfig, AttachmentDownloadConfig } from "../config.js";
+import type { ImRingCentralConfig, AccessControlConfig, OwnerCredentialsConfig, ProcessingPlaceholderConfig, AttachmentDownloadConfig } from "../config.js";
 
 export type RingCentralConfig = ImRingCentralConfig;
-export type RingCentralTeamConfig = TeamConfig;
-export type RingCentralGroupDmConfig = TeamConfig;
-export type RingCentralDmPolicy = ImRingCentralConfig["dmPolicy"];
-export type RingCentralGroupPolicy = ImRingCentralConfig["groupPolicy"];
+export type RingCentralAccessControl = AccessControlConfig;
+export type RingCentralDmPolicy = ImRingCentralConfig["access"]["dmMode"];
+export type RingCentralGroupPolicy = ImRingCentralConfig["access"]["groupMode"];
 export type RingCentralReplyToMode = ImRingCentralConfig["replyToMode"];
 export type RingCentralOwnerCredentials = OwnerCredentialsConfig;
 export type { ProcessingPlaceholderConfig, AttachmentDownloadConfig };

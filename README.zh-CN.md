@@ -80,7 +80,11 @@ npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 环境变量的只有密钥类：`RC_BOT_TOKEN`、`RC_SERVER_URL`、
 `RC_USER_CLIENT_ID`、`RC_USER_CLIENT_SECRET`、`RC_USER_JWT_TOKEN`。
 其余配置想用环境变量驱动时，用 cordis 的 `${VAR}` 插值，例如
-`dmPolicy: ${RC_DM_POLICY:-pairing}`。
+`access.groupMode: ${RC_GROUP_MODE:-open}`。
+
+访问控制块与 `@tencent-connect/dsh-qqbot` 完全一致（QQ 的 `c2c` 表面
+在这里叫 `dm`）。RingCentral 的三种非私聊聊天类型（Team / Everyone /
+Group）统一归入 `group` 表面管理。
 
 | 配置 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
@@ -88,13 +92,13 @@ npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 | `ownerCredentials.clientId` / `clientSecret` / `jwt` | string | - | Owner JWT（env: `RC_USER_*`） |
 | `server` | string | `https://platform.ringcentral.com` | API 服务器（env: `RC_SERVER_URL`） |
 | `botExtensionId` | string | 自动探测 | Bot person id（mention/回声检测） |
-| `dmPolicy` | enum | `pairing` | 私聊策略：`disabled` / `allowlist` / `pairing` / `open` |
-| `allowFrom` | string[] | `[]` | 私聊白名单（stable person id）；`open` 需包含 `"*"` |
-| `dangerouslyAllowEmailMatching` | boolean | `false` | 允许按 email 别名匹配白名单 |
-| `groupPolicy` | enum | `disabled` | Team/Everyone 策略：`disabled` / `allowlist` / `open` |
-| `teams` | map | `{}` | 每 chat 配置：`allow`、`requireMention`、`systemPrompt`、`users` |
-| `groupDmEnabled` | boolean | `false` | 启用 Group DM |
-| `groupDmChannels` | map | `{}` | Group DM 显式白名单 |
+| `access.dmMode` | enum | `open` | 私聊策略：`disabled` / `allowlist` / `open` |
+| `access.dmAllow` | string[] | `[]` | 私聊白名单（person id）；空或含 `"*"` = 全部放行 |
+| `access.groupMode` | enum | `open` | 群聊策略：`disabled` / `allowlist` / `open` |
+| `access.groupAllow` | string[] | `[]` | 群聊白名单（chat id）；空或含 `"*"` = 全部放行 |
+| `requireMention` | boolean | `true` | 群聊是否需要 @bot 触发 |
+| `groupPrompt` | string | - | 群聊额外 system prompt |
+| `directPrompt` | string | - | 私聊额外 system prompt |
 | `threadRequireMention` | boolean | `true` | 线程跟进是否需要 @bot |
 | `noThreadChannels` | string[] | `[]` | 不做线程回复的 chat id |
 | `replyToMode` | enum | `first` | `off` / `first` / `all` |
@@ -103,7 +107,6 @@ npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 | `attachments.enabled` / `maxCount` / `maxBytes` | - | `true` / `5` / `5242880` | 入站附件下载 |
 | `historyMessageLimit` | number | `250` | 历史工具默认条数 |
 | `homeChannel` | string | - | 历史工具回退目标 |
-| `requireMention` | boolean | `true` | Team/Everyone **与 Group DM** 的全局 @bot 门控（per-chat `requireMention` 可覆盖） |
 | `textChunkLimit` | number | `4000` | 单条出站消息最大字符数 |
 | `allowBots` | boolean | `false` | 允许 bot 身份的入站消息 |
 | `provider` / `model` | string | 宿主默认 | 模型路由（优先级：per-peer 偏好 → 配置 → settings.yaml → 宿主） |
@@ -175,11 +178,11 @@ npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 | 现象 | 可能原因 | 修复 |
 | --- | --- | --- |
 | 插件未启动 | 缺少 `RC_BOT_TOKEN` | 设置 `RC_BOT_TOKEN` 或在 `cordis.patch.yml` 配置 `botToken` |
-| Team 中 bot 不回复 | `groupPolicy: disabled` 或未 @ | 在 `teams` 中放行该 chat 并 @bot |
-| 私聊被忽略 | `dmPolicy` 或配对已被占用 | 检查 `dmPolicy` / `allowFrom`；pairing 模式首个私聊用户独占配对 |
+| 群聊中 bot 不回复 | `access.groupMode: disabled`、未在白名单或未 @ | 检查 `access.groupMode` / `access.groupAllow` 并 @bot |
+| 私聊被忽略 | `access.dmMode: disabled` 或发送者不在 `access.dmAllow` | 检查 `access.dmMode` / `access.dmAllow` |
 | 历史工具返回空 | 目标聊天对 bot 与 owner 均不可见 | 读取链 bot 优先、owner 回退；传裸 chat id 或 `channel:<chatId>`，并确认至少一个客户端是该聊天成员 |
 | 回复未线程化 | `replyToMode: off` 或 `noThreadChannels` | 检查 `replyToMode` 与 `noThreadChannels` |
-| 旧环境变量被拒绝 | `RC_ALLOWED_USER_EMAILS` 等 | 行为配置已收敛到 cordis 配置树，改用 `allowFrom` / `teams`（日志中有迁移指引） |
+| 旧环境变量被拒绝 | `RC_ALLOWED_USER_EMAILS` 等 | 行为配置已收敛到 cordis 配置树，改用 `access.dmAllow` / `access.groupAllow`（日志中有迁移指引） |
 
 ## License
 

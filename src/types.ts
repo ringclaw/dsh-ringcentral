@@ -2,8 +2,8 @@
  * dsh-im-ringcentral 插件内部类型定义
  */
 
-/** 会话作用域 */
-export type ChatScope = 'direct' | 'group' | 'channel';
+/** 会话作用域（对齐 dsh-qqbot 的 c2c/group 两表面：dm → direct） */
+export type ChatScope = 'direct' | 'group';
 
 /** RingCentral 回复目标 */
 export interface ReplyTarget {

@@ -20,7 +20,6 @@ import type { Post } from '../ringcentral/types.js';
 import { RingCentralClient, createBotClient, createOwnerClient } from '../ringcentral/client.js';
 import { RingCentralWebSocketMonitor } from '../ringcentral/monitor.js';
 import { handleInboundPost } from '../ringcentral/inbound.js';
-import { PairingStore } from '../ringcentral/pairing.js';
 import { sendMessage, updateMessage, deleteMessage } from '../ringcentral/send.js';
 import { resolveInboundAttachmentsForAgent } from '../ringcentral/attachments.js';
 import { ThreadParticipationTracker } from '../ringcentral/threading.js';
@@ -53,7 +52,6 @@ export async function bootstrapGateway(
   }
 
   const tracker = new ThreadParticipationTracker();
-  const pairing = new PairingStore();
   const monitors: RingCentralWebSocketMonitor[] = [];
   const seenPostIds = new Set<string>();
   const manager = new SessionManager(ctx, agents, config, accountKey, logger);
@@ -158,10 +156,8 @@ export async function bootstrapGateway(
     const decision = await handleInboundPost({
       post,
       account,
-      accountKey,
       botPersonId,
       tracker,
-      pairing,
       log,
       getPersonInfo,
       getChatInfo,
