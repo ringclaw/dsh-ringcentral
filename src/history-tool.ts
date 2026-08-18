@@ -271,7 +271,10 @@ function formatPosts(posts: Post[]): string {
       const attachments = post.attachments?.length
         ? ' attachments=' + post.attachments.map((item) => item.name ?? item.type).join(',')
         : '';
-      return '[' + (post.creationTime ?? 'unknown time') + '] ' + (post.creatorId || 'unknown') + ': ' + (post.text || '(empty)') + attachments;
+      const thread = post.parentPostId || post.threadId
+        ? ' #id=' + post.id + ' parent=' + (post.parentPostId ?? '-') + ' thread=' + (post.threadId ?? '-')
+        : '';
+      return '[' + (post.creationTime ?? 'unknown time') + '] ' + (post.creatorId || 'unknown') + ': ' + (post.text || '(empty)') + thread + attachments;
     })
     .join('\n');
 }
