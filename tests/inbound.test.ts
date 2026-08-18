@@ -235,6 +235,34 @@ describe("inbound body assembly", () => {
   });
 });
 
+describe("inbound reply targeting", () => {
+  it("anchors replyToId on the triggering post itself (top-level message)", async () => {
+    const account = makeAccount({ dmPolicy: "open", allowFrom: ["*"] });
+    const decision = await run(makePost({ id: "trigger-post" }), account, {
+      getChatInfo: async () => ({ id: "chat-1", type: "Direct" } as Chat),
+    });
+    expect(decision.admitted).toBe(true);
+    if (decision.admitted) {
+      expect(decision.replyToId).toBe("trigger-post");
+      expect(decision.threadId).toBeUndefined();
+    }
+  });
+
+  it("passes through threadId for in-thread triggers", async () => {
+    const account = makeAccount({ dmPolicy: "open", allowFrom: ["*"] });
+    const decision = await run(
+      makePost({ id: "trigger-post", parentPostId: "parent-post", threadId: "thread-root" }),
+      account,
+      { getChatInfo: async () => ({ id: "chat-1", type: "Direct" } as Chat) },
+    );
+    expect(decision.admitted).toBe(true);
+    if (decision.admitted) {
+      expect(decision.replyToId).toBe("trigger-post");
+      expect(decision.threadId).toBe("thread-root");
+    }
+  });
+});
+
 describe("stripRcMentions", () => {
   it("strips leading bot mention", () => {
     expect(stripRcMentions("![:Person](bot-1) hello", "bot-1")).toBe("hello");
