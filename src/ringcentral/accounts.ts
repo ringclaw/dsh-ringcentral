@@ -296,7 +296,7 @@ export function resolveAccount(
   return {
     botToken,
     ownerCredentials,
-    server: cfg.server ?? readEnv("RC_SERVER_URL", env) ?? DEFAULT_SERVER,
+    server: cleanEnvPlaceholder(cfg.server) ?? readEnv("RC_SERVER_URL", env) ?? DEFAULT_SERVER,
     allowFrom,
     dangerouslyAllowEmailMatching: readBoolean(cfg.dangerouslyAllowEmailMatching, false, undefined, env),
     groupDmEnabled: readBoolean(cfg.groupDmEnabled, false, "RC_GROUP_DM_ENABLED", env),
@@ -313,8 +313,8 @@ export function resolveAccount(
     attachments: resolveAttachmentDownloads(cfg, env),
     debugInboundMessages: readBoolean(cfg.debugInboundMessages, false, "RC_DEBUG_INBOUND_MESSAGES", env),
     historyMessageLimit,
-    homeChannel: cfg.homeChannel ?? readEnv("RC_HOME_CHANNEL", env),
-    homeChannelName: cfg.homeChannelName ?? readEnv("RC_HOME_CHANNEL_NAME", env),
+    homeChannel: cleanEnvPlaceholder(cfg.homeChannel) ?? readEnv("RC_HOME_CHANNEL", env),
+    homeChannelName: cleanEnvPlaceholder(cfg.homeChannelName) ?? readEnv("RC_HOME_CHANNEL_NAME", env),
     config: { ...cfg, teams: resolveTeams(cfg, env) },
   };
 }

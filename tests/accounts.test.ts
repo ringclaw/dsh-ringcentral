@@ -37,11 +37,30 @@ describe("resolveAccount", () => {
 
   it("cleans __FROM_ENV__ placeholders", () => {
     const account = resolveAccount(
-      { botToken: "__FROM_ENV__", ownerCredentials: { clientId: "__FROM_ENV__", clientSecret: "__FROM_ENV__", jwt: "__FROM_ENV__" } },
-      env({ RC_BOT_TOKEN: "t", RC_USER_CLIENT_ID: "cid", RC_USER_CLIENT_SECRET: "cs", RC_USER_JWT_TOKEN: "jwt" }),
+      {
+        botToken: "__FROM_ENV__",
+        server: "__FROM_ENV__",
+        homeChannel: "__FROM_ENV__",
+        ownerCredentials: { clientId: "__FROM_ENV__", clientSecret: "__FROM_ENV__", jwt: "__FROM_ENV__" },
+      },
+      env({
+        RC_BOT_TOKEN: "t",
+        RC_SERVER_URL: "https://env.example.com",
+        RC_HOME_CHANNEL: "home-1",
+        RC_USER_CLIENT_ID: "cid",
+        RC_USER_CLIENT_SECRET: "cs",
+        RC_USER_JWT_TOKEN: "jwt",
+      }),
     );
     expect(account.botToken).toBe("t");
+    expect(account.server).toBe("https://env.example.com");
+    expect(account.homeChannel).toBe("home-1");
     expect(account.ownerCredentials).toEqual({ clientId: "cid", clientSecret: "cs", jwt: "jwt" });
+  });
+
+  it("falls back to default server when placeholder and env are both absent", () => {
+    const account = resolveAccount({ botToken: "t", server: "__FROM_ENV__" }, {});
+    expect(account.server).toBe("https://platform.ringcentral.com");
   });
 
   it("requires all three owner credential parts", () => {
