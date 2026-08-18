@@ -118,18 +118,6 @@ describe("resolveAccount — 行为配置单一来源（config），默认值与
   });
 });
 
-describe("resolveAccount — 旧字段迁移报错", () => {
-  it("rejects legacy config fields", () => {
-    expect(() => resolveAccount(partial({ allowedUserEmails: ["a@b.c"] }), {})).toThrow(/no longer supported/);
-    expect(() => resolveAccount(partial({ allowedChannels: ["g"] }), {})).toThrow(/no longer supported/);
-  });
-
-  it("rejects legacy env fields", () => {
-    expect(() => resolveAccount(partial(), env({ RC_ALLOWED_USER_EMAILS: "a@b.c" }))).toThrow(/no longer supported/);
-    expect(() => resolveAccount(partial(), env({ RC_FREE_RESPONSE_CHANNELS: "g" }))).toThrow(/no longer supported/);
-  });
-});
-
 describe("isAccountConfigured", () => {
   it("detects config or env token", () => {
     expect(isAccountConfigured(partial(), {})).toBe(true);

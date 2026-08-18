@@ -182,7 +182,6 @@ npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 | 私聊被忽略 | `access.dmMode: disabled` 或发送者不在 `access.dmAllow` | 检查 `access.dmMode` / `access.dmAllow` |
 | 历史工具返回空 | 目标聊天对 bot 与 owner 均不可见 | 读取链 bot 优先、owner 回退；传裸 chat id 或 `channel:<chatId>`，并确认至少一个客户端是该聊天成员 |
 | 回复未线程化 | `replyToMode: off` 或 `noThreadChannels` | 检查 `replyToMode` 与 `noThreadChannels` |
-| 旧环境变量被拒绝 | `RC_ALLOWED_USER_EMAILS` 等 | 行为配置已收敛到 cordis 配置树，改用 `access.dmAllow` / `access.groupAllow`（日志中有迁移指引） |
 
 ## License
 

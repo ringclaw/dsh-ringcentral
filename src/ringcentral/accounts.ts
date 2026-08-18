@@ -28,25 +28,6 @@ const DEFAULT_ATTACHMENTS = {
   maxBytes: 5 * 1024 * 1024,
 };
 
-/** 旧配置字段迁移指引（hermes/openclaw 兼容） */
-const LEGACY_CONFIG_FIELDS: Record<string, string> = {
-  allowedUserEmails: "access.dmAllow",
-  allowAllUsers: 'access.dmMode: "open"',
-  allowedChannels: "access.groupAllow",
-  ignoredChannels: "access.groupAllow",
-  freeResponseChannels: "requireMention: false",
-  groups: "access.groupAllow",
-};
-
-/** 旧环境变量迁移指引：行为配置已收敛到 cordis 配置树（可用 ${VAR} 插值注入） */
-const LEGACY_ENV_FIELDS: Record<string, string> = {
-  RC_ALLOWED_USER_EMAILS: "config access.dmAllow",
-  RC_ALLOW_ALL_USERS: 'config access.dmMode="open"',
-  RC_ALLOWED_CHANNELS: "config access.groupAllow",
-  RC_IGNORED_CHANNELS: "config access.groupAllow",
-  RC_FREE_RESPONSE_CHANNELS: "config requireMention=false",
-};
-
 function readEnv(name: string, env: NodeJS.ProcessEnv): string | undefined {
   const value = env[name];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -61,27 +42,6 @@ function cleanEnvPlaceholder(value: string | undefined): string | undefined {
 
 function clampInteger(value: number, min: number, max: number): number {
   return Math.min(Math.max(Math.trunc(value), min), max);
-}
-
-function assertNoLegacyConfig(cfg: ImRingCentralConfig | undefined): void {
-  const record = (cfg ?? {}) as unknown as Record<string, unknown>;
-  for (const [field, replacement] of Object.entries(LEGACY_CONFIG_FIELDS)) {
-    if (Object.prototype.hasOwnProperty.call(record, field)) {
-      throw new Error(
-        'Legacy RingCentral config field "' + field + '" is no longer supported. Use "' + replacement + '" instead.',
-      );
-    }
-  }
-}
-
-function assertNoLegacyEnv(env: NodeJS.ProcessEnv): void {
-  for (const [name, replacement] of Object.entries(LEGACY_ENV_FIELDS)) {
-    if (readEnv(name, env) !== undefined) {
-      throw new Error(
-        'Legacy RingCentral env "' + name + '" is no longer supported. Use "' + replacement + '" instead.',
-      );
-    }
-  }
 }
 
 function resolveOwnerCredentials(
@@ -104,9 +64,6 @@ export function resolveAccount(
   raw: ImRingCentralConfig | undefined,
   env: NodeJS.ProcessEnv = process.env,
 ): ResolvedAccount {
-  assertNoLegacyConfig(raw);
-  assertNoLegacyEnv(env);
-
   const botToken = cleanEnvPlaceholder(raw?.botToken) ?? readEnv("RC_BOT_TOKEN", env);
   if (!botToken) {
     throw new Error("RingCentral bot token not configured. Set botToken in config or RC_BOT_TOKEN.");

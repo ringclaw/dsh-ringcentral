@@ -193,7 +193,6 @@ absolute path and writes the gitignored `cordis.local.yml`.
 | DM ignored | `access.dmMode: disabled` or sender not in `access.dmAllow` | Check `access.dmMode` / `access.dmAllow` |
 | History tool returns nothing | Chat not visible to bot or owner | Reads try the bot first, then the owner; pass a bare chat id or `channel:<chatId>` and make sure one client is a member |
 | Replies not threaded | `replyToMode: off` or `noThreadChannels` | Check `replyToMode` and `noThreadChannels` |
-| Legacy env rejected | `RC_ALLOWED_USER_EMAILS` etc. | Behavioral config lives in the cordis config tree now — use `access.dmAllow` / `access.groupAllow` (see migration errors in logs) |
 
 ## License
 
