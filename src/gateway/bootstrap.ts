@@ -292,12 +292,12 @@ export async function bootstrapGateway(
         monitors.push(ownerMonitor);
       }
 
-      // ── owner 历史工具（可选：需 ctx.tools + owner 凭据） ──
+      // ── 历史工具（owner 优先、bot 回退；有 tools registry 即注册） ──
       let unregisterHistoryTool: (() => void) | undefined;
       const historyReady: Promise<void> = (async () => {
-        if (ownerClient && toolsRegistry) {
+        if (toolsRegistry) {
           try {
-            const tool = await createHistoryTool({ account, ownerClient });
+            const tool = await createHistoryTool({ account, ownerClient, botClient });
             if (tool) {
               const registry = toolsRegistry as unknown as { register(definition: unknown): () => void };
               unregisterHistoryTool = registry.register(tool);

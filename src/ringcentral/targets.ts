@@ -41,9 +41,18 @@ export function buildChannelTarget(chatId: string): string {
 }
 
 export function extractChatId(target: string): string | null {
-  const parsed = parseTarget(target);
-  return parsed && parsed.kind !== "user" ? parsed.id : null;
+  const trimmed = target.trim();
+  const parsed = parseTarget(trimmed);
+  if (parsed) {
+    return parsed.kind !== "user" ? parsed.id : null;
+  }
+  // 裸数字 id（RingCentral chat id 为纯数字）直接视为 chat id；
+  // person id 场景请使用 user:<id> 或 @ 形式。
+  return BARE_CHAT_ID_RE.test(trimmed) ? trimmed : null;
 }
+
+/** 纯数字目标（RingCentral chat id 形态） */
+const BARE_CHAT_ID_RE = /^\d+$/;
 
 export function extractTargetId(target: string): string | null {
   return parseTarget(target)?.id ?? null;

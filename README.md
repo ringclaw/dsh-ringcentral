@@ -76,8 +76,10 @@ works inside a deepseek-harness source tree (`pnpm dsh`), not with the
 5. Copy the bot JWT and use it as `RC_BOT_TOKEN`.
 
 Optional owner credentials (JWT REST API app for your own account, with
-`TeamMessaging` + `WebSocketsSubscription` + `ReadMessages`) enable
-`ringcentral_get_recent_messages` history reads and outbound owner fallback.
+`TeamMessaging` + `WebSocketsSubscription` + `ReadMessages`) give
+`ringcentral_get_recent_messages` owner-scoped reads and outbound owner
+fallback. Without them the history tool still registers and reads through
+the bot client (chats the bot is a member of).
 
 ## Configuration
 
@@ -180,7 +182,7 @@ absolute path and writes the gitignored `cordis.local.yml`.
 | Plugin not starting | `RC_BOT_TOKEN` missing | Set `RC_BOT_TOKEN` or `botToken` in `cordis.patch.yml` |
 | Bot never replies in a Team | `groupPolicy: disabled` or no mention | Allowlist the chat under `teams` and `@`-mention the bot |
 | DM ignored | `dmPolicy` or pairing already claimed | Check `dmPolicy` / `allowFrom`; pairing is claimed by the first DM sender |
-| History tool says credentials missing | `RC_USER_*` incomplete | Set all three `RC_USER_CLIENT_ID`, `RC_USER_CLIENT_SECRET`, `RC_USER_JWT_TOKEN` |
+| History tool returns nothing | Chat not visible to owner or bot | Reads try the owner first, then the bot; pass a bare chat id or `channel:<chatId>` and make sure one client is a member |
 | Replies not threaded | `replyToMode: off` or `noThreadChannels` | Check `replyToMode` and `noThreadChannels` |
 | Legacy env rejected | `RC_ALLOWED_USER_EMAILS` etc. | Use `RC_ALLOW_FROM` / `RC_TEAMS` (see migration errors in logs) |
 

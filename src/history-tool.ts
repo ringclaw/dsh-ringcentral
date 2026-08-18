@@ -1,8 +1,8 @@
 /**
- * ringcentral_get_recent_messages — owner 凭据读最近消息历史
+ * ringcentral_get_recent_messages — 读最近消息历史
  *
- * 对齐 hermes-ringcentral / openclaw-ringcentral 的 owner-only 历史工具：
- * 仅当配置了 owner JWT 时注册；未配置时工具执行返回配置缺失提示。
+ * 读取链：owner 客户端优先，不可用或无权限时回退 bot 客户端。
+ * 无 owner 凭据时工具仍注册（bot 视角读取）。
  */
 import type { RingCentralClient } from './ringcentral/client.js';
 import type { PersonInfo, Post, ResolvedAccount } from './ringcentral/types.js';
@@ -16,6 +16,8 @@ export interface HistoryToolDeps {
   account: ResolvedAccount;
   /** owner 客户端（未配置 owner 凭据时为 undefined） */
   ownerClient?: RingCentralClient;
+  /** bot 客户端（owner 不可用/无权限时的读取回退） */
+  botClient?: RingCentralClient;
 }
 
 export interface HistoryToolResult {
@@ -40,10 +42,9 @@ export async function createHistoryTool(deps: HistoryToolDeps): Promise<unknown 
   return defineTool({
     name: 'ringcentral_get_recent_messages',
     description:
-      'Read recent RingCentral Team Messaging messages using owner credentials. ' +
-      'Returns a formatted, time-ordered transcript of recent posts in a RingCentral chat or DM. ' +
-      'The target may be a chat id, a canonical target (user:<personId>, team:<chatId>, group:<chatId>, channel:<chatId>), ' +
-      'a ![:Person](id) mention, or a chat name / person email for owner-directory lookup.',
+      'Read recent RingCentral Team Messaging messages. Reads use owner credentials when configured and fall back to the bot client. ' +
+      'The target may be a bare chat id, a canonical target (user:<personId>, team:<chatId>, group:<chatId>, channel:<chatId>), ' +
+      'a ![:Person](id) mention, or a chat name / person email for directory lookup.',
     parameters: {
       target: {
         type: 'string',
@@ -86,23 +87,25 @@ export async function createHistoryTool(deps: HistoryToolDeps): Promise<unknown 
   });
 }
 
-async function readRecentMessages(params: {
+/** 读取链：owner 优先，bot 回退（导出供单元测试） */
+export async function readRecentMessages(params: {
   deps: HistoryToolDeps;
   target?: string;
   targetType: HistoryTargetType;
   recordCount: number;
 }): Promise<HistoryToolResult> {
   const { deps } = params;
-  if (!deps.ownerClient) {
+  const readers = uniqueClients([deps.ownerClient, deps.botClient]);
+  if (readers.length === 0) {
     return {
       ok: false,
       count: 0,
-      text: 'RingCentral owner credentials are not configured. Set RC_USER_CLIENT_ID, RC_USER_CLIENT_SECRET and RC_USER_JWT_TOKEN (or ownerCredentials in config) to enable history reads.',
+      text: 'No RingCentral client is available for history reads. Configure RC_BOT_TOKEN (and optionally RC_USER_* owner credentials).',
     };
   }
 
   const resolved = await resolveHistoryTarget({
-    client: deps.ownerClient,
+    readers,
     target: params.target ?? deps.account.homeChannel,
     targetType: params.targetType,
   });
@@ -111,16 +114,28 @@ async function readRecentMessages(params: {
   }
 
   let posts: Post[] = [];
-  try {
-    posts = (await deps.ownerClient.listPosts(resolved.chatId, params.recordCount)).records ?? [];
-  } catch {
-    posts = [];
+  for (const client of readers) {
+    try {
+      const records = (await client.listPosts(resolved.chatId, params.recordCount)).records ?? [];
+      if (records.length > 0) {
+        posts = records;
+        break;
+      }
+    } catch {
+      // 该客户端无权限或请求失败 → 尝试下一个客户端
+    }
   }
   if (posts.length === 0) {
-    try {
-      posts = (await deps.ownerClient.listLegacyGroupPosts(resolved.chatId, params.recordCount)).records ?? [];
-    } catch {
-      posts = [];
+    for (const client of readers) {
+      try {
+        const records = (await client.listLegacyGroupPosts(resolved.chatId, params.recordCount)).records ?? [];
+        if (records.length > 0) {
+          posts = records;
+          break;
+        }
+      } catch {
+        // 同上
+      }
     }
   }
   const formatted = formatPosts(posts);
@@ -138,8 +153,9 @@ async function readRecentMessages(params: {
   };
 }
 
-async function resolveHistoryTarget(params: {
-  client: RingCentralClient;
+/** 目标解析（导出供单元测试）；读取链依次尝试，全部失败返回 null */
+export async function resolveHistoryTarget(params: {
+  readers: RingCentralClient[];
   target?: string;
   targetType: HistoryTargetType;
 }): Promise<{ chatId: string; label?: string } | null> {
@@ -148,45 +164,90 @@ async function resolveHistoryTarget(params: {
     return null;
   }
   const mentioned = TARGET_MENTION_RE.exec(target);
-  if (mentioned?.groups?.id) {
-    if (mentioned.groups.type?.toLowerCase() === 'person') {
-      const chat = await params.client.createOrFindDm([mentioned.groups.id]);
-      return { chatId: chat.id, label: mentioned.groups.id };
+  const mentionId = mentioned?.groups?.id;
+  if (mentionId) {
+    if (mentioned?.groups?.type?.toLowerCase() === 'person') {
+      const chat = await tryReaders(params.readers, (client) => client.createOrFindDm([mentionId]));
+      return chat ? { chatId: chat.id, label: mentionId } : null;
     }
-    return { chatId: mentioned.groups.id, label: target };
+    return { chatId: mentionId, label: target };
   }
   const parsed = parseTarget(target);
   if (parsed?.kind === 'user') {
-    const chat = await params.client.createOrFindDm([parsed.id]);
-    return { chatId: chat.id, label: parsed.id };
+    const chat = await tryReaders(params.readers, (client) => client.createOrFindDm([parsed.id]));
+    return chat ? { chatId: chat.id, label: parsed.id } : null;
   }
   if (parsed) {
     return { chatId: parsed.id, label: target };
   }
   const chatId = extractChatId(target);
-  if (params.targetType === 'chat' && chatId) {
+  // 裸数字 id 且非显式 person 目标 → 直达 chat id，避免无谓的列表查找
+  if (chatId && params.targetType !== 'person') {
     return { chatId, label: target };
   }
   if (params.targetType === 'person' || target.includes('@')) {
-    const person = await findPerson(params.client, target);
+    // 目录查找要求非空命中才算成功（空结果继续尝试下一个客户端）
+    let person: PersonInfo | undefined;
+    for (const client of params.readers) {
+      try {
+        const found = await findPerson(client, target);
+        if (found) {
+          person = found;
+          break;
+        }
+      } catch {
+        // 尝试下一个客户端
+      }
+    }
     if (!person?.id) {
       return null;
     }
-    const chat = await params.client.createOrFindDm([person.id]);
-    return { chatId: chat.id, label: person.email ?? formatPersonName(person) ?? person.id };
+    const chat = await tryReaders(params.readers, (client) => client.createOrFindDm([person.id]));
+    return chat ? { chatId: chat.id, label: person.email ?? formatPersonName(person) ?? person.id } : null;
   }
-  const chats = await params.client.listChats(undefined, 250);
+  // 名称查找：依次查询读取链，首个匹配命中的客户端胜出
   const normalized = target.toLowerCase();
-  const chat = chats.records.find(
-    (record) => record.id === target || record.name?.toLowerCase() === normalized,
-  );
-  if (chat) {
-    return { chatId: chat.id, label: chat.name ?? chat.id };
-  }
-  if (chatId) {
-    return { chatId, label: target };
+  for (const client of params.readers) {
+    try {
+      const chats = await client.listChats(undefined, 250);
+      const chat = chats.records.find(
+        (record) => record.id === target || record.name?.toLowerCase() === normalized,
+      );
+      if (chat) {
+        return { chatId: chat.id, label: chat.name ?? chat.id };
+      }
+    } catch {
+      // 尝试下一个客户端
+    }
   }
   return null;
+}
+
+/** 依次尝试读取链上的客户端，首个成功的结果胜出；全部失败返回 undefined */
+async function tryReaders<T>(
+  readers: RingCentralClient[],
+  fn: (client: RingCentralClient) => Promise<T>,
+): Promise<T | undefined> {
+  for (const client of readers) {
+    try {
+      return await fn(client);
+    } catch {
+      // 尝试下一个客户端
+    }
+  }
+  return undefined;
+}
+
+/** 去重并过滤掉 undefined 客户端 */
+function uniqueClients(clients: Array<RingCentralClient | undefined>): RingCentralClient[] {
+  const seen = new Set<RingCentralClient>();
+  return clients.filter((client): client is RingCentralClient => {
+    if (!client || seen.has(client)) {
+      return false;
+    }
+    seen.add(client);
+    return true;
+  });
 }
 
 async function findPerson(

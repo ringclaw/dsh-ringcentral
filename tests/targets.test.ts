@@ -45,6 +45,18 @@ describe("extractChatId / normalizeTarget", () => {
     expect(extractChatId("g-1")).toBeNull();
   });
 
+  it("extracts bare numeric chat ids", () => {
+    expect(extractChatId("1619620495362")).toBe("1619620495362");
+    expect(extractChatId(" 123 ")).toBe("123");
+  });
+
+  it("rejects bare non-numeric and legacy-prefixed targets", () => {
+    expect(extractChatId("some-chat-name")).toBeNull();
+    expect(extractChatId("ringcentral:123")).toBeNull();
+    expect(extractChatId("rc:123")).toBeNull();
+    expect(extractChatId("12x3")).toBeNull();
+  });
+
   it("normalizes canonical targets", () => {
     expect(normalizeTarget(" team:g-1 ")).toBe("team:g-1");
     expect(normalizeTarget("123")).toBeUndefined();
