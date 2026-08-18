@@ -70,6 +70,7 @@ const PLACEHOLDER_FAILSAFE_MS = 2 * 60_000;
 class OutboundRouter {
   private readonly buffers = new Map<string, string>();
   private readonly placeholders = new Map<string, PlaceholderState>();
+  private readonly placeholderInflight = new Map<string, Promise<void>>();
   private readonly toolCalls = new Map<string, ToolCallRecord>();
 
   public constructor(
@@ -209,10 +210,28 @@ class OutboundRouter {
 
   // ── 处理占位消息生命周期 ──
 
-  private async ensurePlaceholder(sessionId: string, record: SessionRecord): Promise<void> {
+  /**
+   * 创建处理占位消息（👀）。并发安全：同一会话同一时刻最多一个在途创建，
+   * 避免 assistant/chunk 突发时重复发送占位消息（孤儿 👀 无法被清理）。
+   */
+  private ensurePlaceholder(sessionId: string, record: SessionRecord): Promise<void> {
     const placeholder = this.config.processingPlaceholder;
-    if (!placeholder.enabled || this.placeholders.has(sessionId)) return;
+    if (!placeholder.enabled || this.placeholders.has(sessionId)) return Promise.resolve();
 
+    const inflight = this.placeholderInflight.get(sessionId);
+    if (inflight) return inflight;
+
+    const creation = this.createPlaceholder(sessionId, record).finally(() => {
+      if (this.placeholderInflight.get(sessionId) === creation) {
+        this.placeholderInflight.delete(sessionId);
+      }
+    });
+    this.placeholderInflight.set(sessionId, creation);
+    return creation;
+  }
+
+  private async createPlaceholder(sessionId: string, record: SessionRecord): Promise<void> {
+    const placeholder = this.config.processingPlaceholder;
     try {
       const result = await this.sender.send({
         chatId: record.replyTarget.chatId,
@@ -249,6 +268,15 @@ class OutboundRouter {
   }
 
   private async clearPlaceholder(sessionId: string): Promise<void> {
+    // 等待在途创建先落定，避免「删除已执行、创建后到」重新注册孤儿占位
+    const inflight = this.placeholderInflight.get(sessionId);
+    if (inflight) {
+      try {
+        await inflight;
+      } catch {
+        // 创建失败无需处理
+      }
+    }
     const state = this.placeholders.get(sessionId);
     if (!state) return;
     this.placeholders.delete(sessionId);
