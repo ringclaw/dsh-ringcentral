@@ -1,7 +1,7 @@
 /**
  * ringcentral_get_recent_messages — 读最近消息历史
  *
- * 读取链：owner 客户端优先，不可用或无权限时回退 bot 客户端。
+ * 读取链：bot 客户端（RC_BOT_TOKEN）优先，不可用或无权限时回退 owner 客户端。
  * 无 owner 凭据时工具仍注册（bot 视角读取）。
  */
 import type { RingCentralClient } from './ringcentral/client.js';
@@ -16,7 +16,7 @@ export interface HistoryToolDeps {
   account: ResolvedAccount;
   /** owner 客户端（未配置 owner 凭据时为 undefined） */
   ownerClient?: RingCentralClient;
-  /** bot 客户端（owner 不可用/无权限时的读取回退） */
+  /** bot 客户端（RC_BOT_TOKEN，优先读取） */
   botClient?: RingCentralClient;
 }
 
@@ -42,7 +42,7 @@ export async function createHistoryTool(deps: HistoryToolDeps): Promise<unknown 
   return defineTool({
     name: 'ringcentral_get_recent_messages',
     description:
-      'Read recent RingCentral Team Messaging messages. Reads use owner credentials when configured and fall back to the bot client. ' +
+      'Read recent RingCentral Team Messaging messages. Reads use the bot client (RC_BOT_TOKEN) first and fall back to owner credentials when configured. ' +
       'The target may be a bare chat id, a canonical target (user:<personId>, team:<chatId>, group:<chatId>, channel:<chatId>), ' +
       'a ![:Person](id) mention, or a chat name / person email for directory lookup.',
     parameters: {
@@ -87,7 +87,7 @@ export async function createHistoryTool(deps: HistoryToolDeps): Promise<unknown 
   });
 }
 
-/** 读取链：owner 优先，bot 回退（导出供单元测试） */
+/** 读取链：bot 优先，owner 回退（导出供单元测试） */
 export async function readRecentMessages(params: {
   deps: HistoryToolDeps;
   target?: string;
@@ -95,7 +95,7 @@ export async function readRecentMessages(params: {
   recordCount: number;
 }): Promise<HistoryToolResult> {
   const { deps } = params;
-  const readers = uniqueClients([deps.ownerClient, deps.botClient]);
+  const readers = uniqueClients([deps.botClient, deps.ownerClient]);
   if (readers.length === 0) {
     return {
       ok: false,
