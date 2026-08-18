@@ -70,8 +70,8 @@ npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 
 可选 owner 凭据（owner 账号的 JWT REST API 应用，授予 `TeamMessaging` +
 `WebSocketsSubscription` + `ReadMessages`）为
-`ringcentral_get_recent_messages` 提供 owner 视角读取与出站 owner 回退。
-未配置时历史工具仍会注册，回退到 bot 客户端读取（bot 所在的聊天）。
+`ringcentral_get_recent_messages` 提供 owner 读取回退与出站 owner 回退。
+历史工具始终优先用 bot 客户端（RC_BOT_TOKEN）读取；未配置 owner 凭据时仅用 bot 读取。
 
 ## 配置
 
@@ -173,7 +173,7 @@ npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 | 插件未启动 | 缺少 `RC_BOT_TOKEN` | 设置 `RC_BOT_TOKEN` 或在 `cordis.patch.yml` 配置 `botToken` |
 | Team 中 bot 不回复 | `groupPolicy: disabled` 或未 @ | 在 `teams` 中放行该 chat 并 @bot |
 | 私聊被忽略 | `dmPolicy` 或配对已被占用 | 检查 `dmPolicy` / `allowFrom`；pairing 模式首个私聊用户独占配对 |
-| 历史工具返回空 | 目标聊天对 owner 与 bot 均不可见 | 读取链 owner 优先、bot 回退；传裸 chat id 或 `channel:<chatId>`，并确认至少一个客户端是该聊天成员 |
+| 历史工具返回空 | 目标聊天对 bot 与 owner 均不可见 | 读取链 bot 优先、owner 回退；传裸 chat id 或 `channel:<chatId>`，并确认至少一个客户端是该聊天成员 |
 | 回复未线程化 | `replyToMode: off` 或 `noThreadChannels` | 检查 `replyToMode` 与 `noThreadChannels` |
 | 旧环境变量被拒绝 | `RC_ALLOWED_USER_EMAILS` 等 | 改用 `RC_ALLOW_FROM` / `RC_TEAMS`（日志中有迁移指引） |
 

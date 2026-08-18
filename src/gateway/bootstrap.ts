@@ -292,7 +292,7 @@ export async function bootstrapGateway(
         monitors.push(ownerMonitor);
       }
 
-      // ── 历史工具（owner 优先、bot 回退；有 tools registry 即注册） ──
+      // ── 历史工具（bot 优先、owner 回退；有 tools registry 即注册） ──
       let unregisterHistoryTool: (() => void) | undefined;
       const historyReady: Promise<void> = (async () => {
         if (toolsRegistry) {

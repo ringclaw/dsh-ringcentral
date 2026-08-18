@@ -182,10 +182,12 @@ class OutboundRouter {
     this.logger.debug('im-ringcentral: turn/end sessionId=' + sessionId);
   }
 
-  /** flush：删除占位 → 转 Mini-Markdown → 切分 → 逐段发送 */
+  /** flush：发送真实回复与清理占位并发执行（占位消息是装饰性的，绝不能阻塞回复投递） */
   private async flush(sessionId: string, record: SessionRecord, text: string): Promise<void> {
-    await this.clearPlaceholder(sessionId);
-    await this.send(record, text);
+    await Promise.all([
+      this.send(record, text),
+      this.clearPlaceholder(sessionId),
+    ]);
   }
 
   /** 统一发送：切分 + 逐 chunk 发送 + 错误记录 */

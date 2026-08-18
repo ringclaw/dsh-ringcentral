@@ -115,4 +115,21 @@ describe("outbound placeholder lifecycle", () => {
     // 最终文本仍会发送
     expect(fake.state.sends.length).toBe(2);
   });
+
+  it("still sends the final message when the placeholder send hangs", async () => {
+    const fake = makeFakeSender();
+    const handler = makeHandler(fake);
+
+    // 占位消息创建在途且永不落定（模拟 RingCentral POST 挂起/限流重试）
+    handler(session, { type: "assistant/chunk", data: { chunk: { type: "text-delta", text: "hello" } } });
+    expect(fake.state.sends.length).toBe(1);
+
+    handler(session, { type: "assistant/message", data: { message: { content: [{ type: "text", text: "hello" }] } } });
+    await tick();
+
+    // 最终消息不能被占位创建阻塞：应已发起发送
+    const finalSends = fake.state.sends.filter((s) => s.opts.text !== "👀");
+    expect(finalSends.length).toBe(1);
+    expect(finalSends[0].opts.text).toBe("hello");
+  });
 });

@@ -66,7 +66,7 @@ function post(id: string, text: string): Post {
 const account = { historyMessageLimit: 250 } as unknown as ResolvedAccount;
 
 describe("readRecentMessages", () => {
-  it("resolves bare chat id and falls back to bot when owner has no access", async () => {
+  it("resolves bare chat id using the bot client", async () => {
     const owner = fakeClient();
     const bot = fakeClient({ posts: { "1619620495362": [post("p1", "你好")] } });
     const result = await readRecentMessages({
@@ -80,9 +80,10 @@ describe("readRecentMessages", () => {
     expect(result.count).toBe(1);
     expect(result.text).toContain("你好");
     expect(bot.listPostsCalls).toBe(1);
+    expect(owner.listPostsCalls).toBe(0);
   });
 
-  it("prefers owner results and skips bot", async () => {
+  it("prefers bot results and skips owner", async () => {
     const owner = fakeClient({ posts: { "1619620495362": [post("p1", "from-owner")] } });
     const bot = fakeClient({ posts: { "1619620495362": [post("p2", "from-bot")] } });
     const result = await readRecentMessages({
@@ -92,13 +93,13 @@ describe("readRecentMessages", () => {
       recordCount: 10,
     });
     expect(result.count).toBe(1);
-    expect(result.text).toContain("from-owner");
-    expect(bot.listPostsCalls).toBe(0);
+    expect(result.text).toContain("from-bot");
+    expect(owner.listPostsCalls).toBe(0);
   });
 
-  it("falls back to bot when owner throws", async () => {
-    const owner = fakeClient({ throwOnList: true });
-    const bot = fakeClient({ posts: { "1619620495362": [post("p1", "via-bot")] } });
+  it("falls back to owner when bot throws", async () => {
+    const bot = fakeClient({ throwOnList: true });
+    const owner = fakeClient({ posts: { "1619620495362": [post("p1", "via-owner")] } });
     const result = await readRecentMessages({
       deps: { account, ownerClient: owner, botClient: bot },
       target: "1619620495362",
@@ -106,8 +107,8 @@ describe("readRecentMessages", () => {
       recordCount: 10,
     });
     expect(result.ok).toBe(true);
-    expect(result.text).toContain("via-bot");
-    expect(bot.listPostsCalls).toBe(1);
+    expect(result.text).toContain("via-owner");
+    expect(owner.listPostsCalls).toBe(1);
   });
 
   it("works with bot client only", async () => {
