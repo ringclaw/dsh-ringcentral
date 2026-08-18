@@ -10,6 +10,7 @@ import type { SessionManager, SessionRecord } from '../session/index.js';
 import type { ImRingCentralConfig } from '../config.js';
 import type { Logger } from '../types.js';
 import { chunkText, markdownToMiniMarkdown } from '../ringcentral/markdown.js';
+import { PROCESSING_PLACEHOLDER_DELAYED_TEXT, PROCESSING_PLACEHOLDER_EDIT_DELAY_SECONDS, PROCESSING_PLACEHOLDER_INITIAL_TEXT } from '../ringcentral/shared.js';
 import { formatToolResult, type ToolsRegistryLike, type ToolResultData } from './tool-presenter.js';
 import {
   parseEvent,
@@ -233,11 +234,10 @@ class OutboundRouter {
   }
 
   private async createPlaceholder(sessionId: string, record: SessionRecord): Promise<void> {
-    const placeholder = this.config.processingPlaceholder;
     try {
       const result = await this.sender.send({
         chatId: record.replyTarget.chatId,
-        text: placeholder.initialText,
+        text: PROCESSING_PLACEHOLDER_INITIAL_TEXT,
         replyToId: record.replyTarget.replyToId,
         threadId: record.replyTarget.threadId,
         convertMarkdown: false,
@@ -246,15 +246,14 @@ class OutboundRouter {
       const state: PlaceholderState = { postId: result.postId, editTimer: undefined, failsafeTimer: undefined };
       this.placeholders.set(sessionId, state);
 
-      // 延迟编辑：👀 → ⏳
-      const { delayedText, editDelaySeconds } = placeholder;
-      if (delayedText && delayedText !== placeholder.initialText && editDelaySeconds > 0) {
+      // 延迟编辑：👀 → ⏳（常量，见 ringcentral/shared.ts）
+      if (PROCESSING_PLACEHOLDER_EDIT_DELAY_SECONDS > 0) {
         state.editTimer = setTimeout(() => {
           state.editTimer = undefined;
           void this.sender
-            .update(record.replyTarget.chatId, state.postId, delayedText, false)
+            .update(record.replyTarget.chatId, state.postId, PROCESSING_PLACEHOLDER_DELAYED_TEXT, false)
             .catch((err) => this.logger.warn('im-ringcentral: placeholder edit failed: ' + (err instanceof Error ? err.message : String(err))));
-        }, editDelaySeconds * 1000);
+        }, PROCESSING_PLACEHOLDER_EDIT_DELAY_SECONDS * 1000);
       }
 
       // 兜底清理：防止异常路径下占位消息悬挂

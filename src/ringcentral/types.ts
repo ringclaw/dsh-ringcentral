@@ -105,14 +105,14 @@ export interface PaginatedRecords<T> {
 
 // Config types — 唯一来源是 Schemastery schema（src/config.ts），这里只做别名，
 // 避免在插件层与 RingCentral 层重复声明同一份配置字段。
-import type { ImRingCentralConfig, AccessControlConfig, OwnerCredentialsConfig, ProcessingPlaceholderConfig, AttachmentDownloadConfig } from "../config.js";
+import type { ImRingCentralConfig, AccessControlConfig, OwnerCredentialsConfig, ProcessingPlaceholderConfig } from "../config.js";
 
 export type RingCentralConfig = ImRingCentralConfig;
 export type RingCentralAccessControl = AccessControlConfig;
 export type RingCentralDmPolicy = ImRingCentralConfig["access"]["dmMode"];
 export type RingCentralGroupPolicy = ImRingCentralConfig["access"]["groupMode"];
 export type RingCentralOwnerCredentials = OwnerCredentialsConfig;
-export type { ProcessingPlaceholderConfig, AttachmentDownloadConfig };
+export type { ProcessingPlaceholderConfig };
 
 /** Owner JWT 凭据三元组（三个字段全部就绪才算配置完成） */
 export interface ResolvedRingCentralOwnerCredentials {

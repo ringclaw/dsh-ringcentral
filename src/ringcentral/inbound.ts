@@ -3,7 +3,7 @@
  *
  * 准入决策与 @tencent-connect/dsh-qqbot 的 accessPolicy 中间件语义对齐：
  *   1. 表面分类：Direct/Personal → direct；Team/Everyone/Group → group
- *   2. 自身回声过滤（allowBots 开关）
+ *   2. 自身回声过滤（恒开，对齐 dsh-qqbot 的 messageFilter）
  *   3. direct：access.dmMode（disabled/allowlist/open；dmAllow 空 = 全部放行）
  *      group：access.groupMode（disabled/allowlist/open；groupAllow 空 = 全部放行）
  *   4. @bot 门控：requireMention 只作用于 group（线程内跟进同样要求 mention，对齐 dsh-qqbot）
@@ -71,8 +71,8 @@ export async function handleInboundPost(inCtx: InboundContext): Promise<InboundD
   const chat = inCtx.getChatInfo ? await inCtx.getChatInfo(chatId) : null;
   const surface: ChatSurfaceKind = classifyChatSurface(chat);
 
-  // ── 自身回声过滤 ──
-  if (!config.allowBots && inCtx.botPersonId && senderId === inCtx.botPersonId) {
+  // ── 自身回声过滤（恒开，对齐 dsh-qqbot 的 messageFilter） ──
+  if (inCtx.botPersonId && senderId === inCtx.botPersonId) {
     return { admitted: false, reason: "self-echo" };
   }
 

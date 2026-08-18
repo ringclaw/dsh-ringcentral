@@ -165,7 +165,7 @@ describe("inbound admission — group（access.groupMode，Team/Everyone/Group �
 });
 
 describe("inbound filtering", () => {
-  it("drops self-echo by default", async () => {
+  it("always drops self-echo (bot own posts)", async () => {
     const account = makeAccount({});
     const decision = await run(makePost({ creatorId: "bot-1" }), account, {
       getChatInfo: async () => directChat,
@@ -174,9 +174,9 @@ describe("inbound filtering", () => {
     if (!decision.admitted) expect(decision.reason).toBe("self-echo");
   });
 
-  it("allowBots admits bot posts", async () => {
-    const account = makeAccount({ allowBots: true });
-    const decision = await run(makePost({ creatorId: "bot-1" }), account, {
+  it("admits other senders", async () => {
+    const account = makeAccount({});
+    const decision = await run(makePost({ creatorId: "user-1" }), account, {
       getChatInfo: async () => directChat,
     });
     expect(decision.admitted).toBe(true);

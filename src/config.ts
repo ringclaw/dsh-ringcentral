@@ -2,6 +2,7 @@
  * dsh-im-ringcentral 插件配置 Schema
  *
  * 访问控制块与 @tencent-connect/dsh-qqbot 形态对齐（唯一差异：c2c → dm）。
+ * 平台细节（占位文本、附件上限等）硬编码在 ringcentral/shared.ts，不暴露配置。
  */
 import Schema from '@deepseek-ai/schemastery';
 
@@ -24,20 +25,8 @@ export interface OwnerCredentialsConfig {
 }
 
 export interface ProcessingPlaceholderConfig {
-  /** 是否在处理期间发送占位消息（👀） */
+  /** 是否在处理期间发送占位消息（👀 → ⏳） */
   enabled: boolean;
-  /** 初始占位文本 */
-  initialText: string;
-  /** 延迟后编辑成的文本 */
-  delayedText: string;
-  /** 多少秒后从 initialText 编辑为 delayedText */
-  editDelaySeconds: number;
-}
-
-export interface AttachmentDownloadConfig {
-  enabled: boolean;
-  maxCount: number;
-  maxBytes: number;
 }
 
 export interface ImRingCentralConfig {
@@ -47,8 +36,6 @@ export interface ImRingCentralConfig {
   ownerCredentials: OwnerCredentialsConfig;
   /** RingCentral API 服务器 */
   server: string;
-  /** Bot person id（缺省自动探测） */
-  botExtensionId: string;
   /** 访问控制 */
   access: AccessControlConfig;
   /** 群聊是否需要 @bot 触发 */
@@ -57,18 +44,14 @@ export interface ImRingCentralConfig {
   groupPrompt?: string;
   /** 私聊额外 system prompt */
   directPrompt?: string;
-  /** 处理占位消息 */
+  /** 处理占位消息（👀 → ⏳） */
   processingPlaceholder: ProcessingPlaceholderConfig;
-  /** 入站附件下载 */
-  attachments: AttachmentDownloadConfig;
   /** 历史工具默认条数 */
   historyMessageLimit: number;
   /** 默认 Home chat（历史工具回退目标） */
   homeChannel: string;
   /** 单条消息最大字符数 */
   textChunkLimit: number;
-  /** 允许 bot 身份的入站消息 */
-  allowBots: boolean;
 
   /** dsh LLM 提供商名称 */
   provider?: string;
@@ -82,7 +65,7 @@ export interface ImRingCentralConfig {
   sessionIdleTimeout: number;
   /** 是否展示工具调用成功结果（工具错误始终展示） */
   showToolResults: boolean;
-  /** 调试模式 */
+  /** 调试模式（含入站消息调试日志） */
   debug: boolean;
 }
 
@@ -94,7 +77,6 @@ export const ConfigSchema: Schema<ImRingCentralConfig> = Schema.object({
     jwt: Schema.string().default('').description('Owner JWT token'),
   }).default({ clientId: '', clientSecret: '', jwt: '' }).description('Owner JWT 凭据'),
   server: Schema.string().default('https://platform.ringcentral.com').description('RingCentral API 服务器'),
-  botExtensionId: Schema.string().default('').description('Bot person id（缺省自动探测）'),
   access: Schema.object({
     dmMode: Schema.union(['open', 'allowlist', 'disabled']).default('open').description('私聊访问模式'),
     dmAllow: Schema.array(Schema.string()).default([]).description('私聊白名单（person id；空 = 全部放行）'),
@@ -110,20 +92,11 @@ export const ConfigSchema: Schema<ImRingCentralConfig> = Schema.object({
   groupPrompt: Schema.string().description('群聊额外 system prompt'),
   directPrompt: Schema.string().description('私聊额外 system prompt'),
   processingPlaceholder: Schema.object({
-    enabled: Schema.boolean().default(false).description('处理期间发送占位消息'),
-    initialText: Schema.string().default('👀').description('初始占位文本'),
-    delayedText: Schema.string().default('⏳').description('延迟后编辑成的文本'),
-    editDelaySeconds: Schema.number().default(2).description('编辑延迟（秒）'),
-  }).default({ enabled: false, initialText: '👀', delayedText: '⏳', editDelaySeconds: 2 }).description('处理占位消息'),
-  attachments: Schema.object({
-    enabled: Schema.boolean().default(true).description('下载入站附件'),
-    maxCount: Schema.number().default(5).description('每条消息最大附件数'),
-    maxBytes: Schema.number().default(5242880).description('单个附件最大字节数'),
-  }).default({ enabled: true, maxCount: 5, maxBytes: 5242880 }).description('入站附件下载'),
+    enabled: Schema.boolean().default(false).description('处理期间发送占位消息（👀 → ⏳）'),
+  }).default({ enabled: false }).description('处理占位消息'),
   historyMessageLimit: Schema.number().default(250).description('历史工具默认条数'),
   homeChannel: Schema.string().default('').description('默认 Home chat id'),
   textChunkLimit: Schema.number().default(4000).description('单条消息最大字符数'),
-  allowBots: Schema.boolean().default(false).description('允许 bot 身份的入站消息'),
 
   provider: Schema.string().description('LLM provider name'),
   model: Schema.string().description('Model name'),

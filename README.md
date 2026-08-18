@@ -101,7 +101,6 @@ The access-control block mirrors `@tencent-connect/dsh-qqbot` exactly
 | `botToken` | string | **required** | Bot static JWT (env: `RC_BOT_TOKEN`) |
 | `ownerCredentials.clientId` / `clientSecret` / `jwt` | string | - | Owner JWT (env: `RC_USER_*`) |
 | `server` | string | `https://platform.ringcentral.com` | API server (env: `RC_SERVER_URL`) |
-| `botExtensionId` | string | auto-detected | Bot person id for mention/self-echo detection |
 | `access.dmMode` | enum | `open` | DM handling: `disabled`, `allowlist`, `open` |
 | `access.dmAllow` | string[] | `[]` | Person ids allowed in DMs; empty or `["*"]` = allow all |
 | `access.groupMode` | enum | `open` | Group handling: `disabled`, `allowlist`, `open` |
@@ -109,13 +108,10 @@ The access-control block mirrors `@tencent-connect/dsh-qqbot` exactly
 | `requireMention` | boolean | `true` | Require `@`-mention in group chats |
 | `groupPrompt` | string | - | Extra system prompt for group chats |
 | `directPrompt` | string | - | Extra system prompt for DMs |
-| `processingPlaceholder.enabled` | boolean | `false` | Post `👀` → `⏳` while the agent works |
-| `processingPlaceholder.editDelaySeconds` | number | `2` | Delay before `👀` becomes `⏳` |
-| `attachments.enabled` / `maxCount` / `maxBytes` | - | `true` / `5` / `5242880` | Inbound attachment download |
+| `processingPlaceholder.enabled` | boolean | `false` | Post `👀` → `⏳` while the agent works (texts/delay are fixed) |
 | `historyMessageLimit` | number | `250` | Default record count for the history tool |
 | `homeChannel` | string | - | Fallback target for the history tool |
 | `textChunkLimit` | number | `4000` | Max chars per outgoing post |
-| `allowBots` | boolean | `false` | Admit bot-authored inbound posts |
 | `provider` / `model` | string | host default | LLM route (fallback chain: per-peer prefs → config → settings.yaml → host) |
 | `preset` | string | - | Agent preset id |
 | `cwd` | string | `process.cwd()` | Agent working directory |

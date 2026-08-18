@@ -4,7 +4,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { isAuthzOrNotFoundError, type RingCentralClient } from "./client.js";
-import type { Attachment, ResolvedAccount } from "./types.js";
+import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_COUNT } from "./shared.js";
+import type { Attachment } from "./types.js";
 
 type LogFn = (message: string) => void;
 
@@ -21,7 +22,6 @@ export interface ResolveInboundAttachmentsOptions {
   attachments: Attachment[] | undefined;
   primaryClient: RingCentralClient;
   fallbackClient?: RingCentralClient;
-  account: ResolvedAccount;
   cwd: string;
   messageId: string;
   log?: LogFn;
@@ -36,14 +36,13 @@ interface NormalizedAttachment {
 export async function resolveInboundAttachmentsForAgent(
   opts: ResolveInboundAttachmentsOptions,
 ): Promise<DownloadedAttachmentFile[]> {
-  const cfg = opts.account.config.attachments;
-  if (!cfg.enabled || cfg.maxCount <= 0 || !opts.attachments?.length) {
+  if (!opts.attachments?.length) {
     return [];
   }
 
   const dir = join(opts.cwd, ".ringcentral", sanitizeId(opts.messageId));
   const results: DownloadedAttachmentFile[] = [];
-  for (const attachment of opts.attachments.slice(0, cfg.maxCount)) {
+  for (const attachment of opts.attachments.slice(0, MAX_ATTACHMENT_COUNT)) {
     const normalized = normalizeAttachment(attachment);
     if (!normalized) {
       opts.log?.("[ringcentral] inbound attachment skipped: missing uri");
@@ -53,7 +52,7 @@ export async function resolveInboundAttachmentsForAgent(
       attachment: normalized,
       primaryClient: opts.primaryClient,
       fallbackClient: opts.fallbackClient,
-      maxBytes: cfg.maxBytes,
+      maxBytes: MAX_ATTACHMENT_BYTES,
       log: opts.log,
     });
     if (!downloaded) {

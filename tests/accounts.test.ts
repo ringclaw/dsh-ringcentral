@@ -57,8 +57,7 @@ describe("resolveAccount — 行为配置单一来源（config），默认值与
     const cfg = resolveAccount(partial(), {}).config;
     expect(cfg.access).toEqual({ dmMode: "open", dmAllow: [], groupMode: "open", groupAllow: [] });
     expect(cfg.requireMention).toBe(true);
-    expect(cfg.attachments).toEqual({ enabled: true, maxCount: 5, maxBytes: 5 * 1024 * 1024 });
-    expect(cfg.processingPlaceholder).toEqual({ enabled: false, initialText: "👀", delayedText: "⏳", editDelaySeconds: 2 });
+    expect(cfg.processingPlaceholder).toEqual({ enabled: false });
     expect(cfg.homeChannel).toBe("");
   });
 
@@ -86,14 +85,12 @@ describe("resolveAccount — 行为配置单一来源（config），默认值与
     const cfg = resolveAccount(
       partial({
         historyMessageLimit: 99999,
-        attachments: { enabled: false, maxCount: 999, maxBytes: 1 },
-        processingPlaceholder: { enabled: true, editDelaySeconds: 999 },
+        processingPlaceholder: { enabled: true },
       }),
       {},
     ).config;
     expect(cfg.historyMessageLimit).toBe(1000);
-    expect(cfg.attachments).toEqual({ enabled: false, maxCount: 20, maxBytes: 1 });
-    expect(cfg.processingPlaceholder.editDelaySeconds).toBe(60);
+    expect(cfg.processingPlaceholder).toEqual({ enabled: true });
   });
 
   it("does NOT read behavioral RC_* env vars (config is the single source)", () => {

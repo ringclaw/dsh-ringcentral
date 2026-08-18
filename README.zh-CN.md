@@ -91,7 +91,6 @@ Group）统一归入 `group` 表面管理。
 | `botToken` | string | **必填** | Bot 静态 JWT（env: `RC_BOT_TOKEN`） |
 | `ownerCredentials.clientId` / `clientSecret` / `jwt` | string | - | Owner JWT（env: `RC_USER_*`） |
 | `server` | string | `https://platform.ringcentral.com` | API 服务器（env: `RC_SERVER_URL`） |
-| `botExtensionId` | string | 自动探测 | Bot person id（mention/回声检测） |
 | `access.dmMode` | enum | `open` | 私聊策略：`disabled` / `allowlist` / `open` |
 | `access.dmAllow` | string[] | `[]` | 私聊白名单（person id）；空或含 `"*"` = 全部放行 |
 | `access.groupMode` | enum | `open` | 群聊策略：`disabled` / `allowlist` / `open` |
@@ -99,13 +98,10 @@ Group）统一归入 `group` 表面管理。
 | `requireMention` | boolean | `true` | 群聊是否需要 @bot 触发 |
 | `groupPrompt` | string | - | 群聊额外 system prompt |
 | `directPrompt` | string | - | 私聊额外 system prompt |
-| `processingPlaceholder.enabled` | boolean | `false` | 处理期间发 `👀` → `⏳` 占位消息 |
-| `processingPlaceholder.editDelaySeconds` | number | `2` | 占位消息编辑延迟（秒） |
-| `attachments.enabled` / `maxCount` / `maxBytes` | - | `true` / `5` / `5242880` | 入站附件下载 |
+| `processingPlaceholder.enabled` | boolean | `false` | 处理期间发 `👀` → `⏳` 占位消息（文本/延迟固定） |
 | `historyMessageLimit` | number | `250` | 历史工具默认条数 |
 | `homeChannel` | string | - | 历史工具回退目标 |
 | `textChunkLimit` | number | `4000` | 单条出站消息最大字符数 |
-| `allowBots` | boolean | `false` | 允许 bot 身份的入站消息 |
 | `provider` / `model` | string | 宿主默认 | 模型路由（优先级：per-peer 偏好 → 配置 → settings.yaml → 宿主） |
 | `preset` | string | - | Agent preset id |
 | `cwd` | string | `process.cwd()` | Agent 工作目录 |

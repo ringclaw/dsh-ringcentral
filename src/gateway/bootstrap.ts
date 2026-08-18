@@ -24,6 +24,7 @@ import { sendMessage, updateMessage, deleteMessage } from '../ringcentral/send.j
 import { resolveInboundAttachmentsForAgent } from '../ringcentral/attachments.js';
 import { ThreadParticipationTracker } from '../ringcentral/threading.js';
 import { chunkText, markdownToMiniMarkdown } from '../ringcentral/markdown.js';
+import { PROCESSING_PLACEHOLDER_DELAYED_TEXT, PROCESSING_PLACEHOLDER_INITIAL_TEXT } from '../ringcentral/shared.js';
 
 /** 每 peer 待处理队列上限的清理水位（超过时丢弃最旧任务） */
 const MAX_PENDING_PER_PEER = 64;
@@ -41,14 +42,12 @@ export async function bootstrapGateway(
     : undefined;
   const accountKey = botClient.getAccountScopeKey();
 
-  // ── bot person id（过滤自身回声 / mention 检测） ──
-  let botPersonId = config.botExtensionId || undefined;
-  if (!botPersonId) {
-    try {
-      botPersonId = String((await botClient.getExtensionInfo()).id);
-    } catch {
-      logger.warn('im-ringcentral: unable to resolve bot extension id; self-echo filtering degraded');
-    }
+  // ── bot person id（过滤自身回声 / mention 检测；自动探测，失败仅告警） ──
+  let botPersonId: string | undefined;
+  try {
+    botPersonId = String((await botClient.getExtensionInfo()).id);
+  } catch {
+    logger.warn('im-ringcentral: unable to resolve bot extension id; self-echo filtering degraded');
   }
 
   const tracker = new ThreadParticipationTracker();
@@ -132,7 +131,6 @@ export async function bootstrapGateway(
       attachments: post.attachments,
       primaryClient: botClient,
       fallbackClient: ownerClient,
-      account,
       cwd: config.cwd || process.cwd(),
       messageId: post.id,
       log,
@@ -244,8 +242,8 @@ export async function bootstrapGateway(
     .effect(() => {
       const controller = new AbortController();
       const ignoredTexts = [
-        account.config.processingPlaceholder.initialText,
-        account.config.processingPlaceholder.delayedText,
+        PROCESSING_PLACEHOLDER_INITIAL_TEXT,
+        PROCESSING_PLACEHOLDER_DELAYED_TEXT,
       ];
 
       // bot 订阅（过滤自身 post）
