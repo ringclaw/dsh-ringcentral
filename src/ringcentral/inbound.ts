@@ -76,7 +76,7 @@ export async function handleInboundPost(inCtx: InboundContext): Promise<InboundD
     return { admitted: false, reason: "self-echo" };
   }
 
-  if (config.debugInboundMessages) {
+  if (config.debug) {
     log(
       "[ringcentral] inbound message " + JSON.stringify({
         chatId,
@@ -96,7 +96,7 @@ export async function handleInboundPost(inCtx: InboundContext): Promise<InboundD
 
   // ── 线程跟进判定 ──
   const threadFollowup = isTrackedThreadFollowup(post, tracker);
-  if (config.debugInboundMessages && (post.parentPostId || post.threadId)) {
+  if (config.debug && (post.parentPostId || post.threadId)) {
     log(
       "[ringcentral] threadFollowup check postId=" + post.id + " parentPostId=" + (post.parentPostId ?? "null") +
         " threadId=" + (post.threadId ?? "null") + " threadFollowup=" + threadFollowup,

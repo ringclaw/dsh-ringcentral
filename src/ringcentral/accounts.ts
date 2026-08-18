@@ -106,7 +106,6 @@ export function resolveAccount(
       maxCount: clampInteger(attachments?.maxCount ?? DEFAULT_ATTACHMENTS.maxCount, 0, MAX_ATTACHMENT_MAX_COUNT),
       maxBytes: clampInteger(attachments?.maxBytes ?? DEFAULT_ATTACHMENTS.maxBytes, 1, MAX_ATTACHMENT_MAX_BYTES),
     },
-    debugInboundMessages: raw?.debugInboundMessages ?? false,
     historyMessageLimit: clampInteger(raw?.historyMessageLimit ?? 250, 1, MAX_HISTORY_MESSAGE_LIMIT),
     homeChannel: raw?.homeChannel ?? "",
     textChunkLimit: raw?.textChunkLimit ?? 4000,

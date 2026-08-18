@@ -121,7 +121,7 @@ The access-control block mirrors `@tencent-connect/dsh-qqbot` exactly
 | `cwd` | string | `process.cwd()` | Agent working directory |
 | `sessionIdleTimeout` | number | `1800000` | Idle session eviction (ms) |
 | `showToolResults` | boolean | `false` | Show successful tool results (errors always show) |
-| `debug` | boolean | `false` | Debug logging |
+| `debug` | boolean | `false` | Debug logging (includes inbound message logs) |
 
 ## Commands
 

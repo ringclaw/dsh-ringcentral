@@ -111,7 +111,7 @@ Group）统一归入 `group` 表面管理。
 | `cwd` | string | `process.cwd()` | Agent 工作目录 |
 | `sessionIdleTimeout` | number | `1800000` | 会话闲置回收（ms） |
 | `showToolResults` | boolean | `false` | 展示工具调用成功结果（错误始终展示） |
-| `debug` | boolean | `false` | 调试模式 |
+| `debug` | boolean | `false` | 调试模式（含入站消息调试日志） |
 
 ## 内置命令
 

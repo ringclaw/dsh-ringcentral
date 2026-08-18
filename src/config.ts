@@ -61,8 +61,6 @@ export interface ImRingCentralConfig {
   processingPlaceholder: ProcessingPlaceholderConfig;
   /** 入站附件下载 */
   attachments: AttachmentDownloadConfig;
-  /** 入站消息调试日志 */
-  debugInboundMessages: boolean;
   /** 历史工具默认条数 */
   historyMessageLimit: number;
   /** 默认 Home chat（历史工具回退目标） */
@@ -122,7 +120,6 @@ export const ConfigSchema: Schema<ImRingCentralConfig> = Schema.object({
     maxCount: Schema.number().default(5).description('每条消息最大附件数'),
     maxBytes: Schema.number().default(5242880).description('单个附件最大字节数'),
   }).default({ enabled: true, maxCount: 5, maxBytes: 5242880 }).description('入站附件下载'),
-  debugInboundMessages: Schema.boolean().default(false).description('入站消息调试日志'),
   historyMessageLimit: Schema.number().default(250).description('历史工具默认条数'),
   homeChannel: Schema.string().default('').description('默认 Home chat id'),
   textChunkLimit: Schema.number().default(4000).description('单条消息最大字符数'),
@@ -134,5 +131,5 @@ export const ConfigSchema: Schema<ImRingCentralConfig> = Schema.object({
   cwd: Schema.string().description('Agent working directory'),
   sessionIdleTimeout: Schema.number().default(30 * 60 * 1000).description('会话闲置超时(ms)'),
   showToolResults: Schema.boolean().default(false).description('是否展示工具调用成功结果（错误始终展示）'),
-  debug: Schema.boolean().default(false),
+  debug: Schema.boolean().default(false).description('调试模式（含入站消息调试日志）'),
 });

@@ -163,7 +163,7 @@ export async function bootstrapGateway(
     });
 
     if (!decision.admitted) {
-      if (config.debug || account.config.debugInboundMessages) {
+      if (config.debug) {
         logger.debug('im-ringcentral: inbound dropped: chatId=' + post.groupId + ' reason=' + decision.reason);
       }
       return;

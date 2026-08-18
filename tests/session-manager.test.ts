@@ -55,7 +55,6 @@ function makeConfig(overrides: Partial<ImRingCentralConfig> = {}): ImRingCentral
     requireMention: true,
     processingPlaceholder: { enabled: false, initialText: "👀", delayedText: "⏳", editDelaySeconds: 2 },
     attachments: { enabled: true, maxCount: 5, maxBytes: 5242880 },
-    debugInboundMessages: false,
     historyMessageLimit: 250,
     homeChannel: "",
     textChunkLimit: 4000,
