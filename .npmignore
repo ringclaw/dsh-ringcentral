@@ -1,0 +1,14 @@
+src/
+dev.ts
+cordis.dev.yml
+tsconfig.json
+vitest.config.ts
+tests/
+scripts/
+.env
+.env.example
+.dsh-sessions/
+.ringcentral/
+*.tsbuildinfo
+node_modules/
+.github/

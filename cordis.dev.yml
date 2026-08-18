@@ -1,0 +1,41 @@
+# 本地开发用 patch overlay（绝对路径加载源码，无需构建、无需预装插件）
+#
+# 用法：
+#   export RC_BOT_TOKEN="你的 Bot JWT"
+#   cd /path/to/deepseek-harness
+#   pnpm dsh web --patch /path/to/dsh-ringcentral/cordis.dev.yml
+#
+
+# 挂载 logger-console 插件，开启 debug 日志（insert 才能新增条目）
+- insert:
+    - id: logger-console
+      name: '@deepseek-ai/cordis-plugin-logger-console'
+      config:
+        colors: 3             # 0 = 禁用颜色（只接受 false 或数字），3 表示支持 256 色
+        levels:
+          default: 3          # 3 = DEBUG，输出所有级别
+        showTime: 'yyyy-MM-dd hh:mm:ss '
+
+
+# 若 profile 已装插件，先禁用 bundle 层插入的那一行（未装则此行被跳过）
+- id: im-ringcentral
+  disabled: true
+
+# 源码版本用唯一 id，避免与 bundle 层同 id 冲突
+- insert:
+    - id: im-ringcentral-dev
+      name: '/path/to/dsh-ringcentral/src/index.ts'
+      config:
+        botToken: __FROM_ENV__
+        server: __FROM_ENV__
+        # provider/model 留空：从宿主默认模型路由继承，可通过 /model 命令切换
+        dmPolicy: pairing
+        groupPolicy: disabled
+        threadRequireMention: true
+        replyToMode: first
+        processingPlaceholder:
+          enabled: true
+        textChunkLimit: 4000
+        sessionIdleTimeout: 1800000
+        showToolResults: false
+        debug: true
