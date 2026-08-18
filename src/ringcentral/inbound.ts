@@ -165,7 +165,9 @@ export async function handleInboundPost(inCtx: InboundContext): Promise<InboundD
     peerId: surface.chatType === "direct" ? senderId : chatId,
     senderId,
     chatId,
-    replyToId: post.parentPostId,
+    // 出站线程锚点：回复挂在触发消息自身下（对齐 openclaw-ringcentral 的 sourcePostId=post.id）；
+    // 顶层消息由此形成新线程，线程内消息仍按 threadId 归入原线程
+    replyToId: post.id,
     threadId: post.threadId,
     body: agentBody,
     systemPrompt: surface.settings?.systemPrompt,
