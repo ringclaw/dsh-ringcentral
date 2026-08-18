@@ -1,9 +1,7 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { rmSync } from "node:fs";
+import { describe, it, expect } from "vitest";
 import { handleInboundPost, stripRcMentions, isTrackedThreadFollowup } from "../src/ringcentral/inbound.js";
 import { resolveAccount } from "../src/ringcentral/accounts.js";
 import { ThreadParticipationTracker } from "../src/ringcentral/threading.js";
-import { PairingStore } from "../src/ringcentral/pairing.js";
 import type { Chat, Post, ResolvedAccount } from "../src/ringcentral/types.js";
 import type { InboundContext } from "../src/ringcentral/inbound.js";
 
@@ -30,90 +28,75 @@ async function run(post: Post, account: ResolvedAccount, opts: Partial<InboundCo
   return await handleInboundPost({
     post,
     account,
-    accountKey: "test-account",
     botPersonId: "bot-1",
     tracker: new ThreadParticipationTracker(),
-    pairing: new PairingStore("/tmp/dsh-ringcentral-test-pairing.json"),
     log: noLog,
     ...opts,
   });
 }
 
-beforeEach(() => {
-  // 清空配对测试文件
-  try {
-    rmSync("/tmp/dsh-ringcentral-test-pairing.json", { force: true });
-  } catch {
-    // ignore
-  }
-});
+const directChat: Chat = { id: "chat-1", type: "Direct" };
+const teamChat: Chat = { id: "team-1", type: "Team" };
+const groupChat: Chat = { id: "group-1", type: "Group" };
+const everyoneChat: Chat = { id: "everyone-1", type: "Everyone" };
 
-describe("inbound admission — direct", () => {
-  it("admits DM under pairing policy and pairs the first sender", async () => {
-    const account = makeAccount({ dmPolicy: "pairing" });
-    const decision = await run(makePost(), account, {
-      getChatInfo: async () => ({ id: "chat-1", type: "Direct" } as Chat),
+describe("inbound admission — dm（access.dmMode）", () => {
+  it("admits anyone by default (dmMode open)", async () => {
+    const account = makeAccount({});
+    const decision = await run(makePost({ creatorId: "anyone" }), account, {
+      getChatInfo: async () => directChat,
     });
     expect(decision.admitted).toBe(true);
     if (decision.admitted) {
       expect(decision.scope).toBe("direct");
-      expect(decision.peerId).toBe("user-1");
+      expect(decision.peerId).toBe("anyone");
     }
-
-    // 第二个用户被拒
-    const other = await run(makePost({ creatorId: "user-2" }), account, {
-      getChatInfo: async () => ({ id: "chat-1", type: "Direct" } as Chat),
-    });
-    expect(other.admitted).toBe(false);
-    if (!other.admitted) expect(other.reason).toBe("dm pairing already claimed");
   });
 
-  it("rejects DM under disabled policy", async () => {
-    const account = makeAccount({ dmPolicy: "disabled" });
+  it("rejects DM under disabled", async () => {
+    const account = makeAccount({ access: { dmMode: "disabled" } });
     const decision = await run(makePost(), account, {
-      getChatInfo: async () => ({ id: "chat-1", type: "Direct" } as Chat),
+      getChatInfo: async () => directChat,
     });
     expect(decision.admitted).toBe(false);
     if (!decision.admitted) expect(decision.reason).toBe("dm policy disabled");
   });
 
   it("allowlist admits listed sender and rejects others", async () => {
-    const account = makeAccount({ dmPolicy: "allowlist", allowFrom: ["user-1"] });
+    const account = makeAccount({ access: { dmMode: "allowlist", dmAllow: ["user-1"] } });
     const ok = await run(makePost(), account, {
-      getChatInfo: async () => ({ id: "chat-1", type: "Direct" } as Chat),
+      getChatInfo: async () => directChat,
     });
     expect(ok.admitted).toBe(true);
 
     const blocked = await run(makePost({ creatorId: "user-9" }), account, {
-      getChatInfo: async () => ({ id: "chat-1", type: "Direct" } as Chat),
+      getChatInfo: async () => directChat,
     });
     expect(blocked.admitted).toBe(false);
     if (!blocked.admitted) expect(blocked.reason).toBe("dm sender not allowlisted");
   });
 
-  it("open policy admits anyone", async () => {
-    const account = makeAccount({ dmPolicy: "open", allowFrom: ["*"] });
-    const decision = await run(makePost({ creatorId: "anyone" }), account, {
-      getChatInfo: async () => ({ id: "chat-1", type: "Direct" } as Chat),
+  it("allowlist with empty dmAllow admits everyone (dsh-qqbot semantic)", async () => {
+    const account = makeAccount({ access: { dmMode: "allowlist", dmAllow: [] } });
+    const decision = await run(makePost({ creatorId: "user-9" }), account, {
+      getChatInfo: async () => directChat,
     });
     expect(decision.admitted).toBe(true);
   });
 });
 
-describe("inbound admission — team", () => {
-  const teamChat: Chat = { id: "team-1", type: "Team" };
-
-  it("rejects team under disabled groupPolicy", async () => {
-    const account = makeAccount({ groupPolicy: "disabled" });
+describe("inbound admission — group（access.groupMode，Team/Everyone/Group 统一表面）", () => {
+  it("rejects group under disabled", async () => {
+    const account = makeAccount({ access: { groupMode: "disabled" } });
     const decision = await run(makePost({ groupId: "team-1" }), account, {
       getChatInfo: async () => teamChat,
     });
     expect(decision.admitted).toBe(false);
-    if (!decision.admitted) expect(decision.reason).toBe("team policy disabled");
+    if (!decision.admitted) expect(decision.reason).toBe("group policy disabled");
   });
 
-  it("requires mention by default in teams", async () => {
-    const account = makeAccount({ groupPolicy: "open" });
+  it("requires mention by default in groups", async () => {
+    const account = makeAccount({});
     const noMention = await run(makePost({ groupId: "team-1" }), account, {
       getChatInfo: async () => teamChat,
     });
@@ -128,92 +111,86 @@ describe("inbound admission — team", () => {
     expect(mentioned.admitted).toBe(true);
   });
 
-  it("allowlist requires explicit team config", async () => {
-    const account = makeAccount({ groupPolicy: "allowlist", teams: { "team-1": { allow: true, requireMention: false } } });
-    const decision = await run(makePost({ groupId: "team-1" }), account, {
-      getChatInfo: async () => teamChat,
-    });
-    expect(decision.admitted).toBe(true);
-
-    const unlisted = makeAccount({ groupPolicy: "allowlist" });
-    const blocked = await run(makePost({ groupId: "team-2" }), unlisted, {
-      getChatInfo: async () => ({ ...teamChat, id: "team-2" }),
-    });
-    expect(blocked.admitted).toBe(false);
-    if (!blocked.admitted) expect(blocked.reason).toBe("team not allowlisted");
-  });
-
-  it("team per-user allowlist", async () => {
+  it("allowlist admits listed chat and rejects others", async () => {
     const account = makeAccount({
-      groupPolicy: "open",
-      teams: { "team-1": { requireMention: false, users: ["user-1"] } },
+      access: { groupMode: "allowlist", groupAllow: ["team-1"] },
+      requireMention: false,
     });
     const ok = await run(makePost({ groupId: "team-1" }), account, {
       getChatInfo: async () => teamChat,
     });
     expect(ok.admitted).toBe(true);
 
-    const blocked = await run(makePost({ groupId: "team-1", creatorId: "user-9" }), account, {
+    const blocked = await run(makePost({ groupId: "team-2" }), account, {
+      getChatInfo: async () => ({ ...teamChat, id: "team-2" }),
+    });
+    expect(blocked.admitted).toBe(false);
+    if (!blocked.admitted) expect(blocked.reason).toBe("group not allowlisted");
+  });
+
+  it("allowlist with empty groupAllow admits every chat (mention gate still applies)", async () => {
+    const account = makeAccount({ access: { groupMode: "allowlist", groupAllow: [] } });
+    const noMention = await run(makePost({ groupId: "team-9" }), account, {
+      getChatInfo: async () => ({ ...teamChat, id: "team-9" }),
+    });
+    expect(noMention.admitted).toBe(false);
+    if (!noMention.admitted) expect(noMention.reason).toBe("mention required");
+
+    const mentioned = await run(
+      makePost({ groupId: "team-9", text: "![:Person](bot-1) hi" }),
+      account,
+      { getChatInfo: async () => ({ ...teamChat, id: "team-9" }) },
+    );
+    expect(mentioned.admitted).toBe(true);
+  });
+
+  it("Group and Everyone chat types are governed by the same group access", async () => {
+    const account = makeAccount({ access: { groupMode: "disabled" } });
+    for (const chat of [groupChat, everyoneChat]) {
+      const decision = await run(makePost({ groupId: chat.id }), account, {
+        getChatInfo: async () => chat,
+      });
+      expect(decision.admitted).toBe(false);
+      if (!decision.admitted) expect(decision.reason).toBe("group policy disabled");
+    }
+  });
+
+  it("requireMention false admits without mention", async () => {
+    const account = makeAccount({ requireMention: false });
+    const decision = await run(makePost({ groupId: "team-1" }), account, {
       getChatInfo: async () => teamChat,
     });
-    expect(blocked.admitted).toBe(false);
-    if (!blocked.admitted) expect(blocked.reason).toBe("team sender not allowed");
-  });
-});
-
-describe("inbound admission — group dm", () => {
-  it("rejects group DM when disabled", async () => {
-    const account = makeAccount({});
-    const decision = await run(makePost({ groupId: "group-1" }), account, {
-      getChatInfo: async () => ({ id: "group-1", type: "Group" } as Chat),
-    });
-    expect(decision.admitted).toBe(false);
-    if (!decision.admitted) expect(decision.reason).toBe("group dm disabled");
-  });
-
-  it("requires explicit allowlist entry", async () => {
-    const account = makeAccount({ groupDmEnabled: true });
-    const blocked = await run(makePost({ groupId: "group-1" }), account, {
-      getChatInfo: async () => ({ id: "group-1", type: "Group" } as Chat),
-    });
-    expect(blocked.admitted).toBe(false);
-    if (!blocked.admitted) expect(blocked.reason).toBe("group dm not allowlisted");
-
-    const allowed = makeAccount({ groupDmEnabled: true, groupDmChannels: { "group-1": { allow: true } } });
-    const ok = await run(makePost({ groupId: "group-1" }), allowed, {
-      getChatInfo: async () => ({ id: "group-1", type: "Group" } as Chat),
-    });
-    expect(ok.admitted).toBe(true);
+    expect(decision.admitted).toBe(true);
   });
 });
 
 describe("inbound filtering", () => {
   it("drops self-echo by default", async () => {
-    const account = makeAccount({ dmPolicy: "open", allowFrom: ["*"] });
+    const account = makeAccount({});
     const decision = await run(makePost({ creatorId: "bot-1" }), account, {
-      getChatInfo: async () => ({ id: "chat-1", type: "Direct" } as Chat),
+      getChatInfo: async () => directChat,
     });
     expect(decision.admitted).toBe(false);
     if (!decision.admitted) expect(decision.reason).toBe("self-echo");
   });
 
   it("allowBots admits bot posts", async () => {
-    const account = makeAccount({ dmPolicy: "open", allowFrom: ["*"], allowBots: true });
+    const account = makeAccount({ allowBots: true });
     const decision = await run(makePost({ creatorId: "bot-1" }), account, {
-      getChatInfo: async () => ({ id: "chat-1", type: "Direct" } as Chat),
+      getChatInfo: async () => directChat,
     });
     expect(decision.admitted).toBe(true);
   });
 });
 
 describe("inbound body assembly", () => {
-  it("strips leading bot mention and builds sender-tagged body in teams", async () => {
-    const account = makeAccount({ groupPolicy: "open", teams: { "team-1": { requireMention: false } } });
+  it("strips leading bot mention and builds sender-tagged body in groups", async () => {
+    const account = makeAccount({ requireMention: false });
     const decision = await run(
       makePost({ groupId: "team-1", text: "![:Person](bot-1) ![:Person](user-2) what now", mentions: [{ id: "bot-1", type: "Person" }] }),
       account,
       {
-        getChatInfo: async () => ({ id: "team-1", type: "Team" } as Chat),
+        getChatInfo: async () => teamChat,
         getPersonInfo: async () => null,
       },
     );
@@ -226,20 +203,35 @@ describe("inbound body assembly", () => {
   });
 
   it("keeps DM body plain", async () => {
-    const account = makeAccount({ dmPolicy: "open", allowFrom: ["*"] });
+    const account = makeAccount({});
     const decision = await run(makePost({ text: "plain text" }), account, {
-      getChatInfo: async () => ({ id: "chat-1", type: "Direct" } as Chat),
+      getChatInfo: async () => directChat,
     });
     expect(decision.admitted).toBe(true);
     if (decision.admitted) expect(decision.body).toBe("plain text");
+  });
+
+  it("returns groupPrompt / directPrompt as the surface system prompt", async () => {
+    const account = makeAccount({ groupPrompt: "你是团队客服", directPrompt: "你是私人助理" });
+    const dm = await run(makePost(), account, { getChatInfo: async () => directChat });
+    expect(dm.admitted).toBe(true);
+    if (dm.admitted) expect(dm.systemPrompt).toBe("你是私人助理");
+
+    const group = await run(
+      makePost({ groupId: "team-1", text: "![:Person](bot-1) hi" }),
+      account,
+      { getChatInfo: async () => teamChat },
+    );
+    expect(group.admitted).toBe(true);
+    if (group.admitted) expect(group.systemPrompt).toBe("你是团队客服");
   });
 });
 
 describe("inbound reply targeting", () => {
   it("anchors replyToId on the triggering post itself (top-level message)", async () => {
-    const account = makeAccount({ dmPolicy: "open", allowFrom: ["*"] });
+    const account = makeAccount({});
     const decision = await run(makePost({ id: "trigger-post" }), account, {
-      getChatInfo: async () => ({ id: "chat-1", type: "Direct" } as Chat),
+      getChatInfo: async () => directChat,
     });
     expect(decision.admitted).toBe(true);
     if (decision.admitted) {
@@ -249,11 +241,11 @@ describe("inbound reply targeting", () => {
   });
 
   it("passes through threadId for in-thread triggers", async () => {
-    const account = makeAccount({ dmPolicy: "open", allowFrom: ["*"] });
+    const account = makeAccount({});
     const decision = await run(
       makePost({ id: "trigger-post", parentPostId: "parent-post", threadId: "thread-root" }),
       account,
-      { getChatInfo: async () => ({ id: "chat-1", type: "Direct" } as Chat) },
+      { getChatInfo: async () => directChat },
     );
     expect(decision.admitted).toBe(true);
     if (decision.admitted) {

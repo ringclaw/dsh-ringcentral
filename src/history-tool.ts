@@ -57,7 +57,7 @@ export async function createHistoryTool(deps: HistoryToolDeps): Promise<unknown 
       },
       record_count: {
         type: 'integer',
-        description: 'Number of recent messages to return (1-1000). Default ' + deps.account.historyMessageLimit + '.',
+        description: 'Number of recent messages to return (1-1000). Default ' + deps.account.config.historyMessageLimit + '.',
       },
     },
     output: {
@@ -81,7 +81,7 @@ export async function createHistoryTool(deps: HistoryToolDeps): Promise<unknown 
         deps,
         target: readString(args?.target),
         targetType: readTargetType(args?.target_type),
-        recordCount: clampRecordCount(args?.record_count, deps.account.historyMessageLimit),
+        recordCount: clampRecordCount(args?.record_count, deps.account.config.historyMessageLimit),
       });
     },
   });
@@ -106,7 +106,7 @@ export async function readRecentMessages(params: {
 
   const resolved = await resolveHistoryTarget({
     readers,
-    target: params.target ?? deps.account.homeChannel,
+    target: params.target ?? deps.account.config.homeChannel,
     targetType: params.targetType,
   });
   if (!resolved) {

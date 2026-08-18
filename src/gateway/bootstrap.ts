@@ -20,7 +20,6 @@ import type { Post } from '../ringcentral/types.js';
 import { RingCentralClient, createBotClient, createOwnerClient } from '../ringcentral/client.js';
 import { RingCentralWebSocketMonitor } from '../ringcentral/monitor.js';
 import { handleInboundPost } from '../ringcentral/inbound.js';
-import { PairingStore } from '../ringcentral/pairing.js';
 import { sendMessage, updateMessage, deleteMessage } from '../ringcentral/send.js';
 import { resolveInboundAttachmentsForAgent } from '../ringcentral/attachments.js';
 import { ThreadParticipationTracker } from '../ringcentral/threading.js';
@@ -53,7 +52,6 @@ export async function bootstrapGateway(
   }
 
   const tracker = new ThreadParticipationTracker();
-  const pairing = new PairingStore();
   const monitors: RingCentralWebSocketMonitor[] = [];
   const seenPostIds = new Set<string>();
   const manager = new SessionManager(ctx, agents, config, accountKey, logger);
@@ -76,8 +74,8 @@ export async function bootstrapGateway(
         text: opts.text,
         replyToId: opts.replyToId,
         threadId: opts.threadId,
-        replyToMode: account.replyToMode,
-        noThreadChannels: account.noThreadChannels,
+        replyToMode: account.config.replyToMode,
+        noThreadChannels: account.config.noThreadChannels,
         tracker,
         markOwnPost,
         convertMarkdown: opts.convertMarkdown ?? true,
@@ -158,10 +156,8 @@ export async function bootstrapGateway(
     const decision = await handleInboundPost({
       post,
       account,
-      accountKey,
       botPersonId,
       tracker,
-      pairing,
       log,
       getPersonInfo,
       getChatInfo,
@@ -169,7 +165,7 @@ export async function bootstrapGateway(
     });
 
     if (!decision.admitted) {
-      if (config.debug || account.debugInboundMessages) {
+      if (config.debug || account.config.debugInboundMessages) {
         logger.debug('im-ringcentral: inbound dropped: chatId=' + post.groupId + ' reason=' + decision.reason);
       }
       return;
@@ -250,8 +246,8 @@ export async function bootstrapGateway(
     .effect(() => {
       const controller = new AbortController();
       const ignoredTexts = [
-        account.processingPlaceholder.initialText,
-        account.processingPlaceholder.delayedText,
+        account.config.processingPlaceholder.initialText,
+        account.config.processingPlaceholder.delayedText,
       ];
 
       // bot 订阅（过滤自身 post）

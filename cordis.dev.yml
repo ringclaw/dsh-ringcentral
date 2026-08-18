@@ -19,21 +19,13 @@
 - id: im-ringcentral
   disabled: true
 
-# 源码版本用唯一 id，避免与 bundle 层同 id 冲突
+# 源码版本用唯一 id，避免与 bundle 层同 id 冲突；其余配置走 Schema 默认值
 - insert:
     - id: im-ringcentral-dev
       name: '/path/to/dsh-ringcentral/dist/index.js'
       config:
         botToken: __FROM_ENV__
         server: __FROM_ENV__
-        # provider/model 留空：从宿主默认模型路由继承，可通过 /model 命令切换
-        dmPolicy: pairing
-        groupPolicy: disabled
-        threadRequireMention: true
-        replyToMode: first
         processingPlaceholder:
           enabled: true
-        textChunkLimit: 4000
-        sessionIdleTimeout: 1800000
-        showToolResults: false
         debug: true

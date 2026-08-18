@@ -1,53 +1,32 @@
 /**
  * 入站处理器 — RingCentral WebSocket post → 准入判定 → agent body 组装
  *
- * 准入决策自包含（对齐 openclaw-ringcentral 的 channel-ingress 语义）：
- *   1. chat 表面分类：Direct/Personal → direct；Team/Everyone → channel；其余 → Group DM
+ * 准入决策与 @tencent-connect/dsh-qqbot 的 accessPolicy 中间件语义对齐：
+ *   1. 表面分类：Direct/Personal → direct；Team/Everyone/Group → group
  *   2. 自身回声过滤（allowBots 开关）
- *   3. DM：dmPolicy（disabled/allowlist/pairing/open）
- *      Team：groupPolicy + teams 白名单 + 每 chat 用户白名单
- *      Group DM：groupDmEnabled + groupDmChannels 显式白名单
- *   4. @bot 门控：team 默认需要 mention；线程跟进按 threadRequireMention
+ *   3. direct：access.dmMode（disabled/allowlist/open；dmAllow 空 = 全部放行）
+ *      group：access.groupMode（disabled/allowlist/open；groupAllow 空 = 全部放行）
+ *   4. @bot 门控：requireMention 只作用于 group；线程跟进按 threadRequireMention 豁免
  *   5. 剥离开头的 typed mention（![:Person](id)），组装带发送者标签的 agent body
  */
-import type { Chat, PersonInfo, Post, ResolvedAccount, RingCentralTeamConfig } from "./types.js";
+import type { Chat, PersonInfo, Post, ResolvedAccount } from "./types.js";
+import type { ImRingCentralConfig } from "../config.js";
 import type { ChatScope } from "../types.js";
 import type { ThreadParticipationTracker } from "./threading.js";
-import { PairingStore } from "./pairing.js";
 import type { DownloadedAttachmentFile } from "./attachments.js";
 import type { RingCentralClient } from "./client.js";
 
-export type ChatSurface =
-  | {
-      kind: "direct";
-      chatType: "direct";
-      targetKind: "user";
-      settings?: undefined;
-    }
-  | {
-      kind: "group-dm";
-      chatType: "group";
-      targetKind: "group";
-      settings?: RingCentralTeamConfig;
-    }
-  | {
-      kind: "team";
-      chatType: "channel";
-      targetKind: "team" | "channel";
-      settings?: RingCentralTeamConfig;
-    };
+export type ChatSurfaceKind = "direct" | "group";
 
 export interface InboundContext {
   post: Post;
   account: ResolvedAccount;
-  accountKey: string;
   botPersonId?: string;
   tracker: ThreadParticipationTracker;
-  pairing: PairingStore;
   log: (message: string) => void;
-  /** 解析 person 信息（用于 email 别名白名单匹配），不可用时传 undefined */
+  /** 解析 person 信息（发送者显示名用），不可用时传 undefined */
   getPersonInfo?: (personId: string) => Promise<PersonInfo | null>;
-  /** 读取 chat 元信息（用于表面分类），失败时按 Group DM 兜底 */
+  /** 读取 chat 元信息（用于表面分类），失败时按 group 兜底 */
   getChatInfo?: (chatId: string) => Promise<Chat | null>;
   /** 下载入站附件（由 gateway 注入 RingCentralClient 与 cwd） */
   downloadAttachments?: (post: Post) => Promise<DownloadedAttachmentFile[]>;
@@ -63,7 +42,7 @@ export interface AdmittedInbound {
   threadId?: string;
   /** 已剥离开头 mention、带发送者标签的 agent body */
   body: string;
-  /** 该 chat 的额外 system prompt（team/group-dm 配置） */
+  /** 全局 system prompt：direct → directPrompt，group → groupPrompt */
   systemPrompt?: string;
   /** 该消息是否 @ 了 bot */
   wasMentioned: boolean;
@@ -83,25 +62,26 @@ const personCache = new Map<string, PersonInfo | null>();
 
 export async function handleInboundPost(inCtx: InboundContext): Promise<InboundDecision> {
   const { post, account, tracker } = inCtx;
+  const config = account.config;
   const log = inCtx.log;
   const chatId = post.groupId;
   const text = post.text ?? "";
   const senderId = post.creatorId;
 
   const chat = inCtx.getChatInfo ? await inCtx.getChatInfo(chatId) : null;
-  const surface = classifyChatSurface(chat, account, chatId);
+  const surface: ChatSurfaceKind = classifyChatSurface(chat);
 
   // ── 自身回声过滤 ──
-  if (!account.config.allowBots && inCtx.botPersonId && senderId === inCtx.botPersonId) {
+  if (!config.allowBots && inCtx.botPersonId && senderId === inCtx.botPersonId) {
     return { admitted: false, reason: "self-echo" };
   }
 
-  if (account.debugInboundMessages) {
+  if (config.debugInboundMessages) {
     log(
       "[ringcentral] inbound message " + JSON.stringify({
         chatId,
         creatorId: senderId,
-        chatType: surface.chatType,
+        surface,
         textLength: text.length,
         text,
         postId: post.id,
@@ -116,24 +96,18 @@ export async function handleInboundPost(inCtx: InboundContext): Promise<InboundD
 
   // ── 线程跟进判定 ──
   const threadFollowup = isTrackedThreadFollowup(post, tracker);
-  if (account.debugInboundMessages && (post.parentPostId || post.threadId)) {
+  if (config.debugInboundMessages && (post.parentPostId || post.threadId)) {
     log(
       "[ringcentral] threadFollowup check postId=" + post.id + " parentPostId=" + (post.parentPostId ?? "null") +
         " threadId=" + (post.threadId ?? "null") + " threadFollowup=" + threadFollowup,
     );
   }
 
-  const requireMention = resolveRequireMention({
-    account,
-    surface,
-    surfaceRequireMention: surface.settings?.requireMention,
-    threadFollowup,
-  });
-
-  // ── 准入判定 ──
-  const admission = await decideAdmission({ inCtx, surface, chatId, senderId, requireMention, mentionFacts });
-  if (!admission.admitted) {
-    return admission;
+  // ── 准入判定（对齐 dsh-qqbot accessPolicy 语义） ──
+  const requireMention = resolveRequireMention(surface, threadFollowup, config);
+  const drop = decideAdmission({ config, surface, chatId, senderId, requireMention, mentionFacts });
+  if (drop) {
+    return drop;
   }
 
   // ── 注册线程参与（用户起始的线程也记录，后续跟进可识别） ──
@@ -141,7 +115,7 @@ export async function handleInboundPost(inCtx: InboundContext): Promise<InboundD
 
   // ── 组装 agent body ──
   const body = stripRcMentions(text, inCtx.botPersonId, {
-    preserveNonBotMentions: surface.chatType === "direct" && !!account.ownerCredentials,
+    preserveNonBotMentions: surface === "direct" && !!account.ownerCredentials,
   });
 
   const attachments = inCtx.downloadAttachments ? await inCtx.downloadAttachments(post) : [];
@@ -154,15 +128,15 @@ export async function handleInboundPost(inCtx: InboundContext): Promise<InboundD
     body,
     senderId,
     senderName,
-    scope: surface.chatType === "direct" ? "direct" : surface.chatType === "group" ? "group" : "channel",
+    scope: surface,
     wasMentioned: mentionFacts.wasMentioned,
     attachmentLines,
   });
 
   return {
     admitted: true,
-    scope: surface.chatType === "direct" ? "direct" : surface.chatType === "group" ? "group" : "channel",
-    peerId: surface.chatType === "direct" ? senderId : chatId,
+    scope: surface,
+    peerId: surface === "direct" ? senderId : chatId,
     senderId,
     chatId,
     // 出站线程锚点：回复挂在触发消息自身下（对齐 openclaw-ringcentral 的 sourcePostId=post.id）；
@@ -170,165 +144,67 @@ export async function handleInboundPost(inCtx: InboundContext): Promise<InboundD
     replyToId: post.id,
     threadId: post.threadId,
     body: agentBody,
-    systemPrompt: surface.settings?.systemPrompt,
+    systemPrompt: surface === "direct" ? config.directPrompt : config.groupPrompt,
     wasMentioned: mentionFacts.wasMentioned,
   };
 }
 
-// ── 准入决策 ──
+// ── 准入决策（对齐 dsh-qqbot accessPolicy：空白名单 = 放行全部） ──
 
-async function decideAdmission(params: {
-  inCtx: InboundContext;
-  surface: ChatSurface;
+/** 返回丢弃原因；undefined 表示放行 */
+function decideAdmission(params: {
+  config: ImRingCentralConfig;
+  surface: ChatSurfaceKind;
   chatId: string;
   senderId: string;
   requireMention: boolean;
   mentionFacts: { canDetectMention: boolean; wasMentioned: boolean; hasAnyMention: boolean };
-}): Promise<InboundDecision> {
-  const { inCtx, surface, chatId, senderId, requireMention, mentionFacts } = params;
-  const { account, accountKey, pairing } = inCtx;
+}): DroppedInbound | undefined {
+  const { config, surface, chatId, senderId, requireMention, mentionFacts } = params;
 
-  if (surface.kind === "direct") {
-    switch (account.dmPolicy) {
+  if (surface === "direct") {
+    switch (config.access.dmMode) {
       case "disabled":
         return { admitted: false, reason: "dm policy disabled" };
-      case "open":
-        break;
       case "allowlist": {
-        const allowed = await matchesAllowFrom(inCtx, senderId);
-        if (!allowed) return { admitted: false, reason: "dm sender not allowlisted" };
-        break;
-      }
-      case "pairing": {
-        const outcome = pairing.pair(accountKey, senderId);
-        if (outcome.paired !== senderId) {
-          return { admitted: false, reason: "dm pairing already claimed" };
+        // 对齐 dsh-qqbot accessPolicy：空白名单或含 "*" 视为放行全部
+        const allow = config.access.dmAllow;
+        if (allow.length > 0 && !allow.includes("*") && !allow.includes(senderId)) {
+          return { admitted: false, reason: "dm sender not allowlisted" };
         }
         break;
       }
+      case "open":
+        break;
     }
-    return admit({ chatId, senderId, surface, scope: "direct", peerId: senderId, requireMention: false });
+    return undefined;
   }
 
-  if (surface.kind === "group-dm") {
-    if (!account.groupDmEnabled) {
-      return { admitted: false, reason: "group dm disabled" };
-    }
-    if (!surface.settings || surface.settings.allow === false) {
-      return { admitted: false, reason: "group dm not allowlisted" };
-    }
-    const users = surface.settings.users ?? [];
-    if (users.length > 0 && !users.some((u) => String(u) === senderId)) {
-      return { admitted: false, reason: "group dm sender not allowed" };
-    }
-    if (requireMention && !mentionFacts.wasMentioned) {
-      return { admitted: false, reason: "mention required" };
-    }
-    return admit({ chatId, senderId, surface, scope: "group", peerId: chatId, requireMention });
-  }
-
-  // team / channel
-  const explicitTeamConfig = account.config.teams?.[chatId];
-  switch (account.groupPolicy) {
+  switch (config.access.groupMode) {
     case "disabled":
-      return { admitted: false, reason: "team policy disabled" };
-    case "allowlist":
-      if (explicitTeamConfig === undefined) {
-        return { admitted: false, reason: "team not allowlisted" };
+      return { admitted: false, reason: "group policy disabled" };
+    case "allowlist": {
+      // 对齐 dsh-qqbot accessPolicy：空白名单或含 "*" 视为放行全部
+      const allow = config.access.groupAllow;
+      if (allow.length > 0 && !allow.includes("*") && !allow.includes(chatId)) {
+        return { admitted: false, reason: "group not allowlisted" };
       }
       break;
+    }
     case "open":
       break;
   }
-  if (explicitTeamConfig?.allow === false) {
-    return { admitted: false, reason: "team disabled" };
-  }
-  const users = surface.settings?.users ?? [];
-  if (users.length > 0 && !users.some((u) => String(u) === senderId)) {
-    return { admitted: false, reason: "team sender not allowed" };
-  }
+
   if (requireMention && !mentionFacts.wasMentioned) {
     return { admitted: false, reason: "mention required" };
   }
-  return admit({ chatId, senderId, surface, scope: "channel", peerId: chatId, requireMention });
-}
-
-function admit(params: {
-  chatId: string;
-  senderId: string;
-  surface: ChatSurface;
-  scope: ChatScope;
-  peerId: string;
-  requireMention: boolean;
-}): InboundDecision {
-  return {
-    admitted: true,
-    scope: params.scope,
-    peerId: params.peerId,
-    senderId: params.senderId,
-    chatId: params.chatId,
-    body: "",
-    systemPrompt: params.surface.settings?.systemPrompt,
-    wasMentioned: false,
-  };
-}
-
-/** allowlist 匹配：person id 精确匹配；dangerouslyAllowEmailMatching 时允许 email 别名 */
-async function matchesAllowFrom(inCtx: InboundContext, senderId: string): Promise<boolean> {
-  const allowFrom = inCtx.account.allowFrom;
-  if (allowFrom.includes("*")) return true;
-  if (allowFrom.includes(senderId)) return true;
-
-  if (inCtx.account.dangerouslyAllowEmailMatching && inCtx.getPersonInfo) {
-    const person = await resolvePersonInfo(inCtx, senderId);
-    const email = person?.email?.trim().toLowerCase();
-    if (email && allowFrom.some((entry) => String(entry).trim().toLowerCase() === email)) {
-      return true;
-    }
-  }
-  return false;
+  return undefined;
 }
 
 // ── 表面分类 ──
 
-function classifyChatSurface(
-  chat: Chat | null,
-  account: ResolvedAccount,
-  chatId: string,
-): ChatSurface {
-  if (chat?.type === "Direct" || chat?.type === "Personal") {
-    return {
-      kind: "direct",
-      chatType: "direct",
-      targetKind: "user",
-    };
-  }
-  if (chat?.type === "Team" || chat?.type === "Everyone") {
-    return {
-      kind: "team",
-      chatType: "channel",
-      targetKind: chat.type === "Team" ? "team" : "channel",
-      settings: resolveTeamSettings(account, chatId),
-    };
-  }
-  return {
-    kind: "group-dm",
-    chatType: "group",
-    targetKind: "group",
-    settings: account.groupDmChannels[chatId],
-  };
-}
-
-function resolveTeamSettings(
-  account: ResolvedAccount,
-  chatId: string,
-): RingCentralTeamConfig | undefined {
-  const defaults = account.config.teams?.["*"];
-  const explicit = account.config.teams?.[chatId];
-  if (!defaults) {
-    return explicit;
-  }
-  return explicit ? { ...defaults, ...explicit } : defaults;
+function classifyChatSurface(chat: Chat | null): ChatSurfaceKind {
+  return chat?.type === "Direct" || chat?.type === "Personal" ? "direct" : "group";
 }
 
 // ── mention ──
@@ -403,25 +279,18 @@ export function isTrackedThreadFollowup(post: Post, tracker: ThreadParticipation
   );
 }
 
-function resolveRequireMention(params: {
-  account: ResolvedAccount;
-  surface: ChatSurface;
-  surfaceRequireMention?: boolean;
-  threadFollowup: boolean;
-}): boolean {
-  if (params.surface.kind === "direct") {
+function resolveRequireMention(
+  surface: ChatSurfaceKind,
+  threadFollowup: boolean,
+  config: ImRingCentralConfig,
+): boolean {
+  if (surface === "direct") {
     return false;
   }
-  if (params.threadFollowup && !params.account.threadRequireMention) {
+  if (threadFollowup && !config.threadRequireMention) {
     return false;
   }
-  if (params.surfaceRequireMention !== undefined) {
-    return params.surfaceRequireMention;
-  }
-  if (params.account.requireMentionExplicit) {
-    return params.account.requireMention;
-  }
-  return params.surface.kind === "team";
+  return config.requireMention;
 }
 
 // ── body 组装 ──
