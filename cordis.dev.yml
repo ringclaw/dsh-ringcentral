@@ -1,21 +1,19 @@
-# 本地开发用 patch overlay（绝对路径加载源码，无需构建、无需预装插件）
+# 本地开发用 patch overlay 模板（绝对路径加载构建产物，无需预装插件）
+#
+# 注意：name 路径按 dsh 的 profile 目录解析，不能是相对路径。
+# 请先运行 `pnpm build && node scripts/gen-dev-patch.mjs` 生成本机路径的
+# cordis.local.yml，或手动把 /path/to/dsh-ringcentral 替换为本仓库绝对路径。
+#
+# 为什么是 dist/index.js 而不是 src/index.ts：
+# npx 安装的 @deepseek-ai/dsh 无法把 import './x.js' 解析到 ./x.ts，
+# 直接加载 .ts 入口会报 Cannot find module。构建产物 + tsc --watch 重建，
+# loader 检测到文件变化会自动热重载，开发体验一致。
 #
 # 用法：
 #   export RC_BOT_TOKEN="你的 Bot JWT"
-#   cd /path/to/deepseek-harness
-#   pnpm dsh web --patch /path/to/dsh-ringcentral/cordis.dev.yml
-#
-
-# 挂载 logger-console 插件，开启 debug 日志（insert 才能新增条目）
-- insert:
-    - id: logger-console
-      name: '@deepseek-ai/cordis-plugin-logger-console'
-      config:
-        colors: 3             # 0 = 禁用颜色（只接受 false 或数字），3 表示支持 256 色
-        levels:
-          default: 3          # 3 = DEBUG，输出所有级别
-        showTime: 'yyyy-MM-dd hh:mm:ss '
-
+#   pnpm build
+#   node scripts/gen-dev-patch.mjs
+#   npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 
 # 若 profile 已装插件，先禁用 bundle 层插入的那一行（未装则此行被跳过）
 - id: im-ringcentral
@@ -24,7 +22,7 @@
 # 源码版本用唯一 id，避免与 bundle 层同 id 冲突
 - insert:
     - id: im-ringcentral-dev
-      name: '/path/to/dsh-ringcentral/src/index.ts'
+      name: '/path/to/dsh-ringcentral/dist/index.js'
       config:
         botToken: __FROM_ENV__
         server: __FROM_ENV__

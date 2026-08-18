@@ -50,10 +50,22 @@ npx @deepseek-ai/dsh --profile ringcentral
 
 ### 3. --patch development mode
 
+The `--patch` overlay loads the plugin from a local absolute path without
+installing it into a profile. Generate the machine-local patch first, then
+boot:
+
 ```bash
+cd /path/to/dsh-ringcentral
+pnpm install && pnpm build        # dist entry (npx dsh cannot resolve .js -> .ts)
+node scripts/gen-dev-patch.mjs    # writes cordis.local.yml with the real path
 export RC_BOT_TOKEN="your-bot-jwt"
-npx @deepseek-ai/dsh web --patch /path/to/dsh-ringcentral/cordis.dev.yml
+npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 ```
+
+Use `pnpm dev` (tsc --watch) while iterating: the loader hot-reloads the
+plugin whenever `dist/` changes. Pointing the patch at `src/index.ts` only
+works inside a deepseek-harness source tree (`pnpm dsh`), not with the
+`npx`-installed package.
 
 ## RingCentral bot setup
 
@@ -151,10 +163,15 @@ pnpm build          # or: pnpm dev (watch)
 pnpm test
 pnpm typecheck
 
-# debug against a harness checkout
+# run against the npx-installed dsh
 export RC_BOT_TOKEN="xxx"
-pnpm dsh web --patch /path/to/dsh-ringcentral/cordis.dev.yml
+node scripts/gen-dev-patch.mjs
+npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 ```
+
+`cordis.dev.yml` is the committed template; `scripts/gen-dev-patch.mjs`
+replaces the `/path/to/dsh-ringcentral` placeholder with the machine's
+absolute path and writes the gitignored `cordis.local.yml`.
 
 ## Troubleshooting
 

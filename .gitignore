@@ -5,3 +5,4 @@ dist/
 .dsh-sessions/
 .ringcentral/
 coverage/
+cordis.local.yml

@@ -45,10 +45,20 @@ npx @deepseek-ai/dsh --profile ringcentral
 
 ### 方式三：--patch 开发模式
 
+`--patch` overlay 通过本地绝对路径加载插件，无需安装到 profile。
+先生成本机路径的 patch 文件再启动：
+
 ```bash
+cd /path/to/dsh-ringcentral
+pnpm install && pnpm build        # dist 入口（npx dsh 无法把 .js 解析到 .ts）
+node scripts/gen-dev-patch.mjs    # 生成本机路径的 cordis.local.yml
 export RC_BOT_TOKEN="你的 Bot JWT"
-npx @deepseek-ai/dsh web --patch /path/to/dsh-ringcentral/cordis.dev.yml
+npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 ```
+
+迭代时用 `pnpm dev`（tsc --watch）：`dist/` 变化后 loader 自动热重载插件。
+指向 `src/index.ts` 的入口只在 deepseek-harness 源码树内（`pnpm dsh`）可用，
+`npx` 安装的 dsh 不支持。
 
 ## RingCentral Bot 配置
 
@@ -145,10 +155,15 @@ pnpm build          # 或 pnpm dev（watch）
 pnpm test
 pnpm typecheck
 
-# 对 harness 源码树调试
+# 对 npx 安装的 dsh 调试
 export RC_BOT_TOKEN="xxx"
-pnpm dsh web --patch /path/to/dsh-ringcentral/cordis.dev.yml
+node scripts/gen-dev-patch.mjs
+npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 ```
+
+`cordis.dev.yml` 是提交到仓库的模板；`scripts/gen-dev-patch.mjs` 把
+`/path/to/dsh-ringcentral` 占位符替换为本机绝对路径，输出到已 gitignore 的
+`cordis.local.yml`。
 
 ## 故障排查
 
