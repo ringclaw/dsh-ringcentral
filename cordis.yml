@@ -71,7 +71,6 @@
       groupAllow:
         - 123456789
     requireMention: true
-    threadRequireMention: false
     processingPlaceholder:
       enabled: true
     provider: deepseek

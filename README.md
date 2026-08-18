@@ -109,9 +109,6 @@ The access-control block mirrors `@tencent-connect/dsh-qqbot` exactly
 | `requireMention` | boolean | `true` | Require `@`-mention in group chats |
 | `groupPrompt` | string | - | Extra system prompt for group chats |
 | `directPrompt` | string | - | Extra system prompt for DMs |
-| `threadRequireMention` | boolean | `true` | Require mention for thread follow-ups |
-| `noThreadChannels` | string[] | `[]` | Chat ids where replies are unthreaded |
-| `replyToMode` | enum | `first` | `off`, `first`, or `all` |
 | `processingPlaceholder.enabled` | boolean | `false` | Post `👀` → `⏳` while the agent works |
 | `processingPlaceholder.editDelaySeconds` | number | `2` | Delay before `👀` becomes `⏳` |
 | `attachments.enabled` / `maxCount` / `maxBytes` | - | `true` / `5` / `5242880` | Inbound attachment download |
@@ -155,7 +152,7 @@ resume → fresh create.
 - **Declarative deps** — `inject = ['agents']`; tools/compaction/presets are optional seams.
 - **Session isolation** — one agent per RingCentral peer.
 - **Mini-Markdown outbound** — replies are converted to RingCentral Mini-Markdown and chunked.
-- **Threading** — replies honor `replyToMode` with owner fallback and unthreaded retry.
+- **Threading** — replies always anchor on the triggering post (threadId preferred), with owner fallback and unthreaded retry.
 - **Idle eviction** — inactive agents are disposed automatically.
 - **Defensive degradation** — missing tools/presets/owner credentials never crash the plugin.
 
@@ -192,7 +189,6 @@ absolute path and writes the gitignored `cordis.local.yml`.
 | Bot never replies in a group chat | `access.groupMode: disabled`, not allowlisted, or no mention | Check `access.groupMode` / `access.groupAllow` and `@`-mention the bot |
 | DM ignored | `access.dmMode: disabled` or sender not in `access.dmAllow` | Check `access.dmMode` / `access.dmAllow` |
 | History tool returns nothing | Chat not visible to bot or owner | Reads try the bot first, then the owner; pass a bare chat id or `channel:<chatId>` and make sure one client is a member |
-| Replies not threaded | `replyToMode: off` or `noThreadChannels` | Check `replyToMode` and `noThreadChannels` |
 
 ## License
 

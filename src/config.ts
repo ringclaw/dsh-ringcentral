@@ -57,12 +57,6 @@ export interface ImRingCentralConfig {
   groupPrompt?: string;
   /** 私聊额外 system prompt */
   directPrompt?: string;
-  /** 线程跟进是否需要 @bot */
-  threadRequireMention: boolean;
-  /** 不做线程回复的 chat id 列表 */
-  noThreadChannels: string[];
-  /** 线程回复模式 */
-  replyToMode: 'off' | 'first' | 'all';
   /** 处理占位消息 */
   processingPlaceholder: ProcessingPlaceholderConfig;
   /** 入站附件下载 */
@@ -117,9 +111,6 @@ export const ConfigSchema: Schema<ImRingCentralConfig> = Schema.object({
   requireMention: Schema.boolean().default(true).description('群聊是否需要 @bot 触发'),
   groupPrompt: Schema.string().description('群聊额外 system prompt'),
   directPrompt: Schema.string().description('私聊额外 system prompt'),
-  threadRequireMention: Schema.boolean().default(true).description('线程跟进是否需要 @bot'),
-  noThreadChannels: Schema.array(Schema.string()).default([]).description('不做线程回复的 chat id 列表'),
-  replyToMode: Schema.union(['off', 'first', 'all']).default('first').description('线程回复模式'),
   processingPlaceholder: Schema.object({
     enabled: Schema.boolean().default(false).description('处理期间发送占位消息'),
     initialText: Schema.string().default('👀').description('初始占位文本'),

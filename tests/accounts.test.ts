@@ -56,9 +56,7 @@ describe("resolveAccount — 行为配置单一来源（config），默认值与
   it("applies defaults to account.config", () => {
     const cfg = resolveAccount(partial(), {}).config;
     expect(cfg.access).toEqual({ dmMode: "open", dmAllow: [], groupMode: "open", groupAllow: [] });
-    expect(cfg.replyToMode).toBe("first");
     expect(cfg.requireMention).toBe(true);
-    expect(cfg.threadRequireMention).toBe(true);
     expect(cfg.attachments).toEqual({ enabled: true, maxCount: 5, maxBytes: 5 * 1024 * 1024 });
     expect(cfg.processingPlaceholder).toEqual({ enabled: false, initialText: "👀", delayedText: "⏳", editDelaySeconds: 2 });
     expect(cfg.homeChannel).toBe("");
@@ -71,8 +69,6 @@ describe("resolveAccount — 行为配置单一来源（config），默认值与
         requireMention: false,
         groupPrompt: "你是团队客服",
         directPrompt: "你是私人助理",
-        noThreadChannels: ["g1"],
-        replyToMode: "all",
         homeChannel: "home-1",
         textChunkLimit: 2000,
       }),
@@ -82,8 +78,6 @@ describe("resolveAccount — 行为配置单一来源（config），默认值与
     expect(cfg.requireMention).toBe(false);
     expect(cfg.groupPrompt).toBe("你是团队客服");
     expect(cfg.directPrompt).toBe("你是私人助理");
-    expect(cfg.noThreadChannels).toEqual(["g1"]);
-    expect(cfg.replyToMode).toBe("all");
     expect(cfg.homeChannel).toBe("home-1");
     expect(cfg.textChunkLimit).toBe(2000);
   });
@@ -108,7 +102,6 @@ describe("resolveAccount — 行为配置单一来源（config），默认值与
       env({ RC_DM_POLICY: "allowlist", RC_GROUP_POLICY: "open", RC_REPLY_TO_MODE: "off", RC_REQUIRE_MENTION: "false" }),
     ).config;
     expect(cfg.access).toEqual({ dmMode: "open", dmAllow: [], groupMode: "open", groupAllow: [] });
-    expect(cfg.replyToMode).toBe("first");
     expect(cfg.requireMention).toBe(true);
   });
 

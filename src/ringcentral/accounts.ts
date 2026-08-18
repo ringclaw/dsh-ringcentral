@@ -91,9 +91,6 @@ export function resolveAccount(
     botExtensionId: raw?.botExtensionId ?? "",
     access,
     requireMention: raw?.requireMention ?? true,
-    threadRequireMention: raw?.threadRequireMention ?? true,
-    noThreadChannels: raw?.noThreadChannels ?? [],
-    replyToMode: raw?.replyToMode ?? "first",
     processingPlaceholder: {
       enabled: placeholder?.enabled ?? DEFAULT_PROCESSING_PLACEHOLDER.enabled,
       initialText: placeholder?.initialText ?? DEFAULT_PROCESSING_PLACEHOLDER.initialText,

@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   ThreadParticipationTracker,
   resolveReplyTransport,
-  channelSetMatches,
 } from "../src/ringcentral/threading.js";
 
 describe("ThreadParticipationTracker", () => {
@@ -30,51 +29,16 @@ describe("ThreadParticipationTracker", () => {
 });
 
 describe("resolveReplyTransport", () => {
-  it("returns empty when replyToMode is off", () => {
-    expect(resolveReplyTransport({ chatId: "c", replyToId: "p", replyToMode: "off" })).toEqual({});
+  it("prefers threadId when present", () => {
+    expect(resolveReplyTransport({ replyToId: "p", threadId: "t" })).toEqual({ threadId: "t" });
   });
 
-  it("returns empty for noThreadChannels", () => {
-    expect(
-      resolveReplyTransport({ chatId: "c", replyToId: "p", replyToMode: "first", noThreadChannels: ["c"] }),
-    ).toEqual({});
+  it("anchors on the triggering post when no threadId", () => {
+    expect(resolveReplyTransport({ replyToId: "p" })).toEqual({ parentPostId: "p" });
   });
 
-  it("prefers threadId", () => {
-    expect(resolveReplyTransport({ chatId: "c", replyToId: "p", threadId: "t", replyToMode: "all" })).toEqual({
-      threadId: "t",
-    });
-  });
-
-  it("first mode suppresses threading after bot already replied to that post", () => {
-    const tracker = new ThreadParticipationTracker();
-    tracker.remember("p");
-    expect(
-      resolveReplyTransport({ chatId: "c", replyToId: "p", replyToMode: "first", tracker }),
-    ).toEqual({});
-  });
-
-  it("first mode threads first reply to a post", () => {
-    const tracker = new ThreadParticipationTracker();
-    expect(
-      resolveReplyTransport({ chatId: "c", replyToId: "p", replyToMode: "first", tracker }),
-    ).toEqual({ parentPostId: "p" });
-  });
-
-  it("all mode always threads", () => {
-    const tracker = new ThreadParticipationTracker();
-    tracker.remember("p");
-    expect(
-      resolveReplyTransport({ chatId: "c", replyToId: "p", replyToMode: "all", tracker }),
-    ).toEqual({ parentPostId: "p" });
-  });
-});
-
-describe("channelSetMatches", () => {
-  it("matches wildcard and exact id", () => {
-    expect(channelSetMatches(["*"], "c1")).toBe(true);
-    expect(channelSetMatches(["c1"], "c1")).toBe(true);
-    expect(channelSetMatches(["c2"], "c1")).toBe(false);
-    expect(channelSetMatches(undefined, "c1")).toBe(false);
+  it("returns empty without any anchor", () => {
+    expect(resolveReplyTransport({})).toEqual({});
+    expect(resolveReplyTransport({ replyToId: null, threadId: null })).toEqual({});
   });
 });

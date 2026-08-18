@@ -6,7 +6,7 @@
  *   2. 自身回声过滤（allowBots 开关）
  *   3. direct：access.dmMode（disabled/allowlist/open；dmAllow 空 = 全部放行）
  *      group：access.groupMode（disabled/allowlist/open；groupAllow 空 = 全部放行）
- *   4. @bot 门控：requireMention 只作用于 group；线程跟进按 threadRequireMention 豁免
+ *   4. @bot 门控：requireMention 只作用于 group（线程内跟进同样要求 mention，对齐 dsh-qqbot）
  *   5. 剥离开头的 typed mention（![:Person](id)），组装带发送者标签的 agent body
  */
 import type { Chat, PersonInfo, Post, ResolvedAccount } from "./types.js";
@@ -104,7 +104,7 @@ export async function handleInboundPost(inCtx: InboundContext): Promise<InboundD
   }
 
   // ── 准入判定（对齐 dsh-qqbot accessPolicy 语义） ──
-  const requireMention = resolveRequireMention(surface, threadFollowup, config);
+  const requireMention = resolveRequireMention(surface, config);
   const drop = decideAdmission({ config, surface, chatId, senderId, requireMention, mentionFacts });
   if (drop) {
     return drop;
@@ -281,13 +281,9 @@ export function isTrackedThreadFollowup(post: Post, tracker: ThreadParticipation
 
 function resolveRequireMention(
   surface: ChatSurfaceKind,
-  threadFollowup: boolean,
   config: ImRingCentralConfig,
 ): boolean {
   if (surface === "direct") {
-    return false;
-  }
-  if (threadFollowup && !config.threadRequireMention) {
     return false;
   }
   return config.requireMention;

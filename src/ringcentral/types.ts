@@ -111,7 +111,6 @@ export type RingCentralConfig = ImRingCentralConfig;
 export type RingCentralAccessControl = AccessControlConfig;
 export type RingCentralDmPolicy = ImRingCentralConfig["access"]["dmMode"];
 export type RingCentralGroupPolicy = ImRingCentralConfig["access"]["groupMode"];
-export type RingCentralReplyToMode = ImRingCentralConfig["replyToMode"];
 export type RingCentralOwnerCredentials = OwnerCredentialsConfig;
 export type { ProcessingPlaceholderConfig, AttachmentDownloadConfig };
 

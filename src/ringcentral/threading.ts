@@ -1,5 +1,3 @@
-import type { RingCentralReplyToMode } from "./types.js";
-
 export class ThreadParticipationTracker {
   private readonly sentPostIds = new Set<string>();
   private readonly threadIds = new Set<string>();
@@ -31,28 +29,18 @@ export class ThreadParticipationTracker {
   }
 }
 
-export function channelSetMatches(entries: readonly string[] | undefined, chatId: string): boolean {
-  return (entries ?? []).some((entry) => entry === "*" || entry === chatId);
-}
-
+/**
+ * 出站线程锚点（对齐 dsh-qqbot：回复始终挂在触发消息上，无模式开关）：
+ * 有 threadId 用 threadId（线程内跟进），否则用 parentPostId 锚定触发消息。
+ */
 export function resolveReplyTransport(params: {
-  chatId: string;
   replyToId?: string | number | null;
   threadId?: string | number | null;
-  replyToMode: RingCentralReplyToMode;
-  noThreadChannels?: readonly string[];
-  tracker?: ThreadParticipationTracker;
 }): { parentPostId?: string | number; threadId?: string | number } {
-  if (params.replyToMode === "off" || channelSetMatches(params.noThreadChannels, params.chatId)) {
-    return {};
-  }
   if (params.threadId) {
     return { threadId: params.threadId };
   }
   if (!params.replyToId) {
-    return {};
-  }
-  if (params.replyToMode === "first" && params.tracker?.has(String(params.replyToId))) {
     return {};
   }
   return { parentPostId: params.replyToId };

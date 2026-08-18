@@ -4,7 +4,6 @@
 import { isAuthzOrNotFoundError, RingCentralApiError, type RingCentralClient } from "./client.js";
 import { markdownToMiniMarkdown } from "./markdown.js";
 import { resolveReplyTransport, type ThreadParticipationTracker } from "./threading.js";
-import type { RingCentralReplyToMode } from "./types.js";
 
 export interface SendOptions {
   client: RingCentralClient;
@@ -13,8 +12,6 @@ export interface SendOptions {
   text?: string;
   replyToId?: string | number | null;
   threadId?: string | number | null;
-  replyToMode?: RingCentralReplyToMode;
-  noThreadChannels?: readonly string[];
   tracker?: ThreadParticipationTracker;
   markOwnPost?: (postId: string) => void;
   convertMarkdown?: boolean;
@@ -28,12 +25,8 @@ export async function sendMessage(opts: SendOptions): Promise<{ postId: string; 
   }
   const finalText = convertMarkdown ? markdownToMiniMarkdown(text) : text;
   const transport = resolveReplyTransport({
-    chatId: opts.chatId,
     replyToId: opts.replyToId,
     threadId: opts.threadId,
-    replyToMode: opts.replyToMode ?? "first",
-    noThreadChannels: opts.noThreadChannels,
-    tracker: opts.tracker,
   });
   const post = await sendPostWithFallback(opts, finalText, transport);
   opts.tracker?.remember(post.id, threadIdForParticipation(post, transport));
@@ -88,8 +81,6 @@ export async function sendTypingIndicator(
     fallbackClient?: RingCentralClient;
     replyToId?: string | number | null;
     threadId?: string | number | null;
-    replyToMode?: RingCentralReplyToMode;
-    noThreadChannels?: readonly string[];
     tracker?: ThreadParticipationTracker;
     markOwnPost?: (postId: string) => void;
   } = {},
@@ -103,8 +94,6 @@ export async function sendTypingIndicator(
       convertMarkdown: false,
       replyToId: opts.replyToId,
       threadId: opts.threadId,
-      replyToMode: opts.replyToMode,
-      noThreadChannels: opts.noThreadChannels,
       tracker: opts.tracker,
       markOwnPost: opts.markOwnPost,
     });

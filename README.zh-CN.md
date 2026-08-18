@@ -99,9 +99,6 @@ Group）统一归入 `group` 表面管理。
 | `requireMention` | boolean | `true` | 群聊是否需要 @bot 触发 |
 | `groupPrompt` | string | - | 群聊额外 system prompt |
 | `directPrompt` | string | - | 私聊额外 system prompt |
-| `threadRequireMention` | boolean | `true` | 线程跟进是否需要 @bot |
-| `noThreadChannels` | string[] | `[]` | 不做线程回复的 chat id |
-| `replyToMode` | enum | `first` | `off` / `first` / `all` |
 | `processingPlaceholder.enabled` | boolean | `false` | 处理期间发 `👀` → `⏳` 占位消息 |
 | `processingPlaceholder.editDelaySeconds` | number | `2` | 占位消息编辑延迟（秒） |
 | `attachments.enabled` / `maxCount` / `maxBytes` | - | `true` / `5` / `5242880` | 入站附件下载 |
@@ -144,7 +141,7 @@ server + bot token 的 SHA-256 指纹。SessionId 由 sessionKey 确定性派生
 - **声明式依赖** — `inject = ['agents']`；tools/compaction/presets 均为可选 seam。
 - **会话隔离** — 每个 RingCentral peer 一个独立 Agent。
 - **Mini-Markdown 出站** — 回复转换为 RingCentral Mini-Markdown 并切分发送。
-- **线程回复** — 遵循 `replyToMode`，owner 回退与去线程重试。
+- **线程回复** — 回复始终锚定触发消息（threadId 优先），owner 回退与去线程重试。
 - **闲置回收** — 超时自动 dispose Agent，防止内存泄漏。
 - **防御式降级** — 缺失 tools/presets/owner 凭据不会导致插件崩溃。
 
@@ -181,7 +178,6 @@ npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 | 群聊中 bot 不回复 | `access.groupMode: disabled`、未在白名单或未 @ | 检查 `access.groupMode` / `access.groupAllow` 并 @bot |
 | 私聊被忽略 | `access.dmMode: disabled` 或发送者不在 `access.dmAllow` | 检查 `access.dmMode` / `access.dmAllow` |
 | 历史工具返回空 | 目标聊天对 bot 与 owner 均不可见 | 读取链 bot 优先、owner 回退；传裸 chat id 或 `channel:<chatId>`，并确认至少一个客户端是该聊天成员 |
-| 回复未线程化 | `replyToMode: off` 或 `noThreadChannels` | 检查 `replyToMode` 与 `noThreadChannels` |
 
 ## License
 

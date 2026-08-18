@@ -74,8 +74,6 @@ export async function bootstrapGateway(
         text: opts.text,
         replyToId: opts.replyToId,
         threadId: opts.threadId,
-        replyToMode: account.config.replyToMode,
-        noThreadChannels: account.config.noThreadChannels,
         tracker,
         markOwnPost,
         convertMarkdown: opts.convertMarkdown ?? true,
