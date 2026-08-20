@@ -142,6 +142,23 @@ deterministically (SHA-256), so the same user/chat always routes to the same
 session and survives restarts. Resolution order: in-process reuse → persisted
 resume → fresh create.
 
+## Agent questions (ask_user)
+
+When the agent calls `ask_user_question`, the plugin renders the question
+into the chat (thread-anchored) and waits for the user to reply in the same
+session:
+
+- Reply with an option number or label to select a choice (`multi_select`
+  accepts `"1, 3"`), or type a free-text answer.
+- Multi-question asks are answered one question at a time.
+- Answers resolve the pending question and are **not** appended to session
+  history (same semantics as the web GUI).
+- Waiting times out after 10 minutes (the ask is cancelled with a notice).
+
+Note: the provider registers on the `userQuestions` service seam. In a web
+profile the GUI provider takes precedence — questions then appear in the web
+UI, not in RingCentral. Use a dedicated profile for IM-only operation.
+
 ## Design principles
 
 - **Pure Cordis plugin** — follows dsh "Plugins, not loop changes".
@@ -185,6 +202,7 @@ absolute path and writes the gitignored `cordis.local.yml`.
 | Bot never replies in a group chat | `access.groupMode: disabled`, not allowlisted, or no mention | Check `access.groupMode` / `access.groupAllow` and `@`-mention the bot |
 | DM ignored | `access.dmMode: disabled` or sender not in `access.dmAllow` | Check `access.dmMode` / `access.dmAllow` |
 | History tool returns nothing | Chat not visible to bot or owner | Reads try the bot first, then the owner; pass a bare chat id or `channel:<chatId>` and make sure one client is a member |
+| Agent question not answered from RingCentral | Web GUI provider registered (web profile) | Questions go to the web UI; use a dedicated profile or answer in the web UI |
 
 ## License
 

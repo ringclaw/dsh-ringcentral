@@ -20,6 +20,7 @@ import type { Post } from '../ringcentral/types.js';
 import { RingCentralClient, createBotClient, createOwnerClient } from '../ringcentral/client.js';
 import { RingCentralWebSocketMonitor } from '../ringcentral/monitor.js';
 import { handleInboundPost } from '../ringcentral/inbound.js';
+import { RingCentralUserQuestionsProvider } from '../ringcentral/user-questions.js';
 import { sendMessage, updateMessage, deleteMessage } from '../ringcentral/send.js';
 import { resolveInboundAttachmentsForAgent } from '../ringcentral/attachments.js';
 import { ThreadParticipationTracker } from '../ringcentral/threading.js';
@@ -148,6 +149,8 @@ export async function bootstrapGateway(
   };
 
   // ── 单条消息处理 ──
+  let userQuestionsProvider: RingCentralUserQuestionsProvider | undefined;
+
   const handlePost = async (post: Post): Promise<void> => {
     const decision = await handleInboundPost({
       post,
@@ -190,6 +193,17 @@ export async function bootstrapGateway(
         return;
       }
       // 未匹配的命令文本：按普通消息继续
+    }
+
+    // ── pending 提问的答案消费（agent ask_user 等待期间，同会话消息即作答） ──
+    if (userQuestionsProvider) {
+      const active = manager.getSessionRecord(decision.scope, decision.peerId);
+      if (active && userQuestionsProvider.tryAnswer(active.sessionId, decision.text)) {
+        if (config.debug) {
+          logger.debug('im-ringcentral: inbound message consumed as user-question answer');
+        }
+        return;
+      }
     }
 
     // ── 组装 agent body → followup ──
@@ -236,6 +250,28 @@ export async function bootstrapGateway(
       }
     }
   };
+
+  // ── userQuestions provider（agent ask_user 的 IM 应答面；web GUI 已注册时跳过） ──
+  let disposeUserQuestions: (() => void) | undefined;
+  try {
+    const userQuestions = ctx.get('userQuestions') as
+      | { registerProvider(provider: unknown): () => void }
+      | undefined;
+    if (userQuestions && typeof userQuestions.registerProvider === 'function') {
+      userQuestionsProvider = new RingCentralUserQuestionsProvider({
+        manager,
+        logger,
+        sendQuestion: async (record, text) => {
+          await sendReply(record.replyTarget, text);
+        },
+      });
+      disposeUserQuestions = userQuestions.registerProvider(userQuestionsProvider);
+      logger.info('[ringcentral] registered userQuestions provider');
+    }
+  } catch (err) {
+    // 例如 web profile 的 GUI provider 已注册（DUPLICATE_PROVIDER）：GUI 优先，IM 作答不可用
+    logger.warn('im-ringcentral: userQuestions provider registration skipped: ' + (err instanceof Error ? err.message : String(err)));
+  }
 
   // ── 生命周期 ──
   (ctx as unknown as { effect(fn: () => (() => Promise<void>) | void, name?: string): void })
@@ -311,6 +347,8 @@ export async function bootstrapGateway(
         logger.info('Shutting down im-ringcentral');
         controller.abort();
         await historyReady;
+        disposeUserQuestions?.();
+        userQuestionsProvider?.dispose();
         unregisterHistoryTool?.();
         await Promise.allSettled(starts);
         await manager.disposeAll();

@@ -40,6 +40,8 @@ export interface AdmittedInbound {
   chatId: string;
   replyToId?: string;
   threadId?: string;
+  /** 剥离开头 mention 的原文（body 组装前；userQuestions 答案解析用） */
+  text: string;
   /** 已剥离开头 mention、带发送者标签的 agent body */
   body: string;
   /** 全局 system prompt：direct → directPrompt，group → groupPrompt */
@@ -143,6 +145,7 @@ export async function handleInboundPost(inCtx: InboundContext): Promise<InboundD
     // 顶层消息由此形成新线程，线程内消息仍按 threadId 归入原线程
     replyToId: post.id,
     threadId: post.threadId,
+    text: body,
     body: agentBody,
     systemPrompt: surface === "direct" ? config.directPrompt : config.groupPrompt,
     wasMentioned: mentionFacts.wasMentioned,
