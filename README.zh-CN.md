@@ -131,6 +131,21 @@ server + bot token 的 SHA-256 指纹。SessionId 由 sessionKey 确定性派生
 （SHA-256），同一用户/聊天始终路由到同一会话，重启后可按 key 恢复。
 解析策略：进程内复用 → 持久化恢复 → 全新创建。
 
+## Agent 提问（ask_user）
+
+agent 调用 `ask_user_question` 时，插件把问题渲染到聊天里（线程锚定）并
+等待用户在同一会话中回复作答：
+
+- 回复选项序号或选项内容选择（`multi_select` 支持 `"1, 3"` 多选），
+  或直接输入自由文本答案。
+- 多问题逐题作答。
+- 答案用于 resolve 挂起的提问，**不会**追加进会话历史（与 web GUI 语义一致）。
+- 等待超时 10 分钟自动取消并通知。
+
+注意：provider 注册在 `userQuestions` 服务 seam 上；web profile 里 GUI
+provider 优先（提问显示在网页而非 RingCentral）。纯 IM 场景请使用专用
+profile。
+
 ## 设计原则
 
 - **纯 Cordis 插件** — 遵循 dsh "Plugins, not loop changes" 原则。
@@ -174,6 +189,7 @@ npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 | 群聊中 bot 不回复 | `access.groupMode: disabled`、未在白名单或未 @ | 检查 `access.groupMode` / `access.groupAllow` 并 @bot |
 | 私聊被忽略 | `access.dmMode: disabled` 或发送者不在 `access.dmAllow` | 检查 `access.dmMode` / `access.dmAllow` |
 | 历史工具返回空 | 目标聊天对 bot 与 owner 均不可见 | 读取链 bot 优先、owner 回退；传裸 chat id 或 `channel:<chatId>`，并确认至少一个客户端是该聊天成员 |
+| agent 提问在 RingCentral 收不到答复 | web profile 已注册 GUI provider | 提问显示在网页 UI；改用专用 profile 或直接在网页作答 |
 
 ## License
 
