@@ -97,8 +97,8 @@ echo "  安装完成"
 echo "=================================================="
 echo
 echo "配置环境变量："
-echo "  export RC_BOT_TOKEN="你的 Bot JWT""
-echo "  export DEEPSEEK_API_KEY="你的API Key""
+echo "  export RC_BOT_TOKEN=\"你的 Bot JWT\""
+echo "  export DEEPSEEK_API_KEY=\"你的API Key\""
 echo
 echo "启动："
 echo "  dsh --profile ${PROFILE}"

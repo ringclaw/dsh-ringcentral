@@ -21,6 +21,15 @@
     "clean": "rm -rf dist",
     "pack:check": "npm pack --dry-run"
   },
+  "files": [
+    "dist",
+    "cordis.patch.yml",
+    "cordis.yml",
+    "install.sh",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
   "keywords": [
     "deepseek-harness",
     "dsh",
