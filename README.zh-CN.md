@@ -106,7 +106,7 @@ Group）统一归入 `group` 表面管理。
 | `historyMessageLimit` | number | `250` | 历史工具默认条数 |
 | `homeChannel` | string | - | 历史工具回退目标 |
 | `textChunkLimit` | number | `4000` | 单条出站消息最大字符数 |
-| `provider` / `model` | string | 宿主默认 | 模型路由（优先级：per-peer 偏好 → 配置 → settings.yaml → 宿主） |
+| `provider` / `model` | string | 宿主默认 | 模型路由（优先级：per-peer 偏好 → 配置 → 宿主 `agentDefaultModel`） |
 | `preset` | string | - | Agent preset id |
 | `cwd` | string | `process.cwd()` | Agent 工作目录 |
 | `sessionIdleTimeout` | number | `1800000` | 会话闲置回收（ms） |

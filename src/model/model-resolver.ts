@@ -9,15 +9,13 @@
  * 优先级（从高到低）：
  *   per-peer 偏好（~/.dsh-ringcentral/model-prefs.json）
  *   > config 显式指定（cordis.yml 的 provider/model）
- *   > settings.yaml 的 agent-default-model（只读，作为默认兜底）
- *   > 宿主 agentDefaultModel 服务
+ *   > 宿主 agentDefaultModel 服务（settings.yaml 由宿主服务接管，不再手读）
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { ImRingCentralConfig } from '../config.js';
 import type { Logger } from '../types.js';
 import type { ModelRoute, ModelEntry } from './types.js';
 import { PrefsStore } from './prefs-store.js';
-import { SettingsReader } from './settings-reader.js';
 
 /** ctx.llm 服务的最小接口（listProviders 同步，listModels 异步） */
 interface LlmServiceLike {
@@ -27,7 +25,6 @@ interface LlmServiceLike {
 
 export class ModelResolver {
   private readonly prefs: PrefsStore;
-  private readonly settings: SettingsReader;
 
   constructor(
     private readonly ctx: Context,
@@ -37,7 +34,6 @@ export class ModelResolver {
     this.prefs = new PrefsStore(
       config.debug ? (msg) => this.logger?.debug(msg) : undefined,
     );
-    this.settings = new SettingsReader();
   }
 
   /**
@@ -109,16 +105,13 @@ export class ModelResolver {
   /**
    * 解析默认模型路由（不含 per-peer 偏好）
    *
-   * 优先级：config 显式指定 > settings.yaml（只读） > 宿主 agentDefaultModel
+   * 优先级：config 显式指定 > 宿主 agentDefaultModel 服务
    * 最终兜底 deepseek-official/deepseek-v4-flash，确保 {{model}} 变量始终有值。
    */
   resolveDefault(): ModelRoute {
     if (this.config.provider && this.config.model) {
       return { provider: this.config.provider, model: this.config.model };
     }
-
-    const fromSettings = this.settings.readDefaultRoute();
-    if (fromSettings) return fromSettings;
 
     const fromHost = this.readFromHost();
     if (fromHost) return fromHost;
@@ -131,7 +124,7 @@ export class ModelResolver {
    */
   async listModels(): Promise<ModelEntry[]> {
     const llm = this.getLlmService();
-    if (!llm) return this.settings.readModels();
+    if (!llm) return [];
 
     try {
       const providers = llm.listProviders();
@@ -149,14 +142,13 @@ export class ModelResolver {
           );
         }
       }
-      if (entries.length > 0) return entries;
+      return entries;
     } catch (err) {
       this.logger?.warn(
-        'ModelResolver: 动态发现模型失败，回退 settings.yaml: ' + (err instanceof Error ? err.message : String(err)),
+        'ModelResolver: 动态发现模型失败: ' + (err instanceof Error ? err.message : String(err)),
       );
+      return [];
     }
-
-    return this.settings.readModels();
   }
 
   /**
@@ -173,7 +165,7 @@ export class ModelResolver {
       }
     }
 
-    return this.settings.readProviders();
+    return [];
   }
 
   // ── 私有方法 ──

@@ -117,7 +117,7 @@ The access-control block mirrors `@tencent-connect/dsh-qqbot` exactly
 | `historyMessageLimit` | number | `250` | Default record count for the history tool |
 | `homeChannel` | string | - | Fallback target for the history tool |
 | `textChunkLimit` | number | `4000` | Max chars per outgoing post |
-| `provider` / `model` | string | host default | LLM route (fallback chain: per-peer prefs → config → settings.yaml → host) |
+| `provider` / `model` | string | host default | LLM route (fallback chain: per-peer prefs → config → host `agentDefaultModel`) |
 | `preset` | string | - | Agent preset id |
 | `cwd` | string | `process.cwd()` | Agent working directory |
 | `sessionIdleTimeout` | number | `1800000` | Idle session eviction (ms) |
