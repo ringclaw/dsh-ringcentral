@@ -19,10 +19,10 @@ function readEnv(name: string, env: NodeJS.ProcessEnv): string | undefined {
 }
 
 /**
- * 旧版本 bundle patch 的 __FROM_ENV__ 占位符（v0.2.x 及更早）。
- * @deprecated 自 v0.3 起由 cordis loader 的 !!js 标签取代；此判断仅作
- * 单向兼容，计划在 v0.5 移除。空值仍视为未配置（与旧 cleanEnvPlaceholder
- * 语义一致，保证 Schema 默认空串回退环境变量），非占位值原样透传。
+ * 旧版本 bundle patch 的 __FROM_ENV__ 占位符（v0.2.x 及更早）兼容判断。
+ * 自 v0.3 起由 cordis loader 的 !!js 标签取代；此判断仅作单向兼容，计划在
+ * v0.5 移除。空值仍视为未配置（与旧 cleanEnvPlaceholder 语义一致，保证
+ * Schema 默认空串回退环境变量），非占位值原样透传。
  */
 function stripLegacyEnvPlaceholder(value: string | undefined): string | undefined {
   if (!value) return undefined;
