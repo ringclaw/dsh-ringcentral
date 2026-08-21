@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { basename, dirname, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -32,25 +32,6 @@ function readPluginVersion(): string {
  */
 export function buildUserAgent(): string {
   return 'dsh-ringcentral/' + PLUGIN_VERSION + ' (Node/' + process.versions.node + '; ' + os.platform() + ')';
-}
-
-/**
- * 从插件安装路径推导 profile 目录（node_modules 的父目录）
- *
- * 逐级向上查找名为 node_modules 的目录并返回其父目录。
- * 用 basename/dirname 而非字符串分隔符匹配，兼容 Windows（\）与 pnpm 嵌套结构。
- *
- * @param baseDir - 起始目录，缺省为插件根（可注入便于测试）
- */
-export function getProfileDir(baseDir: string = PLUGIN_ROOT): string | null {
-  let dir = baseDir;
-  for (let i = 0; i < 32; i++) {
-    if (basename(dir) === 'node_modules') return dirname(dir);
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
 }
 
 /**

@@ -7,10 +7,9 @@
 import type { Context } from '@deepseek-ai/cordis';
 import { ConfigSchema, type ImRingCentralConfig } from './config.js';
 import { resolveAccount } from './ringcentral/accounts.js';
+import { resolveSecret } from './ringcentral/credentials.js';
 import { bootstrapGateway } from './gateway/index.js';
 import type { DshAgentRegistry } from './session/index.js';
-import { getProfileDir } from './shared/index.js';
-import { persistCredentialsToProfile, type SetupCredentials } from './setup.js';
 import type { Logger } from './types.js';
 
 // ── Cordis 插件元数据 ──
@@ -25,43 +24,54 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
   const agents = (ctx as unknown as Record<string, unknown>).agents as DshAgentRegistry;
   const logger: Logger = ((ctx as unknown as Record<string, unknown>).logger as Logger) ?? console;
 
-  console.log('[im-ringcentral] apply() called');
+  // ── 凭据解析：config 显式值优先，其次宿主 credentials 域 ──
+  // 宿主 credentials 服务的解析链：进程环境 → 托管 $DSH_HOME/.credentials.yaml
+  // → 项目/用户 .env；服务不可用时 resolveSecret 回退进程环境变量。
+  const explicitOr = async (configured: string | undefined, envName: string): Promise<string | undefined> => {
+    const explicit = configured?.trim();
+    if (explicit) return explicit;
+    return resolveSecret(ctx, envName, logger);
+  };
 
-  let botToken = config.botToken;
-
-  // ── 凭据缺失时打印指引并尝试持久化环境变量凭据 ──
+  const botToken = await explicitOr(config.botToken, 'RC_BOT_TOKEN');
   if (!botToken) {
-    const envToken = process.env.RC_BOT_TOKEN?.trim();
-    if (!envToken) {
-      logger.error('RC_BOT_TOKEN 未配置，插件未启动');
-      logger.error('请设置环境变量 RC_BOT_TOKEN（RingCentral Bot 静态 JWT），');
-      logger.error('或在 cordis.patch.yml 中为 im-ringcentral 配置 botToken。');
-      return;
-    }
-    botToken = envToken;
-
-    const credentials: SetupCredentials = {
-      botToken,
-      ownerClientId: process.env.RC_USER_CLIENT_ID?.trim() || undefined,
-      ownerClientSecret: process.env.RC_USER_CLIENT_SECRET?.trim() || undefined,
-      ownerJwt: process.env.RC_USER_JWT_TOKEN?.trim() || undefined,
-    };
-
-    // 持久化到 profile：成功则等待热更新重载，失败则用 env 凭据直接启动
-    const persisted = persistCredentialsToProfile(credentials, getProfileDir() ?? undefined, logger);
-    if (persisted) {
-      // 写入 cordis.patch.yml 会触发 dsh 热更新，自动重新加载本插件。
-      // 直接返回，避免与热更新产生竞态。
-      logger.info('配置已保存，等待热更新重新加载...');
-      return;
-    }
-    logger.warn('凭据未能持久化，本次进程将使用环境变量凭据启动（重启后需重新配置）');
+    logger.error('RC_BOT_TOKEN 未配置，插件未启动');
+    logger.error('请设置环境变量 RC_BOT_TOKEN（RingCentral Bot 静态 JWT），');
+    logger.error('或写入 $DSH_HOME/.credentials.yaml 的 RC_BOT_TOKEN 条目。');
+    return;
   }
 
-  // ── 解析有效账号（含 RC_* 环境变量覆盖） ──
+  // server 是运营参数而非密钥：环境变量（credentials 链）优先于 Schema 默认值，
+  // 保证 sandbox 等场景的 RC_SERVER_URL 覆盖始终生效。
+  const server = (await resolveSecret(ctx, 'RC_SERVER_URL', logger)) ?? config.server;
+
+  const [ownerClientId, ownerClientSecret, ownerJwt] = await Promise.all([
+    explicitOr(config.ownerCredentials?.clientId, 'RC_USER_CLIENT_ID'),
+    explicitOr(config.ownerCredentials?.clientSecret, 'RC_USER_CLIENT_SECRET'),
+    explicitOr(config.ownerCredentials?.jwt, 'RC_USER_JWT_TOKEN'),
+  ]);
+  const ownerCredentials = ownerClientId && ownerClientSecret && ownerJwt
+    ? { clientId: ownerClientId, clientSecret: ownerClientSecret, jwt: ownerJwt }
+    : undefined;
+
+  // ── 凭据变更提示：当前架构在启动时解析凭据，热换需重启（live rotation 待后续） ──
+  const eventCtx = ctx as unknown as { on(event: string, handler: (...args: unknown[]) => void): void };
+  eventCtx.on('credentials/updated', (ref: unknown) => {
+    const key = typeof ref === 'string' ? ref : String(ref);
+    if (key === 'RC_BOT_TOKEN' || key.startsWith('RC_USER_')) {
+      logger.warn('im-ringcentral: 凭据 ' + key + ' 已更新；本插件在启动时解析凭据，重启后生效');
+    }
+  });
+
+  // ── 解析有效账号（密钥已通过 credentials 域解析） ──
   let account;
   try {
-    account = resolveAccount({ ...config, botToken });
+    account = resolveAccount({
+      ...config,
+      botToken,
+      server,
+      ownerCredentials: ownerCredentials ?? config.ownerCredentials,
+    });
   } catch (err) {
     logger.error('im-ringcentral: ' + (err instanceof Error ? err.message : String(err)));
     return;
