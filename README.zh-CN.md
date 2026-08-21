@@ -178,9 +178,9 @@ node scripts/gen-dev-patch.mjs
 npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 ```
 
-`cordis.dev.yml` 是提交到仓库的模板；`scripts/gen-dev-patch.mjs` 把
-`/path/to/dsh-ringcentral` 占位符替换为本机绝对路径，输出到已 gitignore 的
-`cordis.local.yml`。
+`scripts/gen-dev-patch.mjs` 直接生成已 gitignore 的 `cordis.local.yml`，
+入口解析为本机绝对路径（默认 `dist/index.js`；传 `src/index.ts` 指向
+TypeScript 入口）。
 
 ## 故障排查
 

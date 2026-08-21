@@ -191,9 +191,9 @@ node scripts/gen-dev-patch.mjs
 npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 ```
 
-`cordis.dev.yml` is the committed template; `scripts/gen-dev-patch.mjs`
-replaces the `/path/to/dsh-ringcentral` placeholder with the machine's
-absolute path and writes the gitignored `cordis.local.yml`.
+`scripts/gen-dev-patch.mjs` emits the gitignored `cordis.local.yml` directly,
+with the entry resolved to an absolute path on the machine (default
+`dist/index.js`; pass `src/index.ts` to point at the TypeScript entry).
 
 ## Troubleshooting
 

@@ -22,7 +22,16 @@ describe("resolveAccount — 密钥类（配置优先，其次环境变量）", 
     expect(resolveAccount(partial({ botToken: undefined }), env({ RC_BOT_TOKEN: "envtok" })).botToken).toBe("envtok");
   });
 
-  it("cleans __FROM_ENV__ placeholders", () => {
+  it("passes plain-string config values through untouched", () => {
+    const account = resolveAccount(
+      partial({ botToken: "tok", server: "https://custom.example.com" }),
+      {},
+    );
+    expect(account.botToken).toBe("tok");
+    expect(account.server).toBe("https://custom.example.com");
+  });
+
+  it("treats legacy __FROM_ENV__ placeholders as unconfigured (@deprecated compat)", () => {
     const account = resolveAccount(
       partial({
         botToken: "__FROM_ENV__",
@@ -36,7 +45,7 @@ describe("resolveAccount — 密钥类（配置优先，其次环境变量）", 
     expect(account.ownerCredentials).toEqual({ clientId: "cid", clientSecret: "cs", jwt: "jwt" });
   });
 
-  it("server defaults when placeholder has no env value", () => {
+  it("server falls back to the default when the legacy placeholder has no env value", () => {
     const account = resolveAccount(partial({ server: "__FROM_ENV__" }), {});
     expect(account.server).toBe("https://platform.ringcentral.com");
   });
@@ -49,6 +58,14 @@ describe("resolveAccount — 密钥类（配置优先，其次环境变量）", 
       env({ RC_USER_CLIENT_ID: "cid", RC_USER_CLIENT_SECRET: "cs", RC_USER_JWT_TOKEN: "jwt" }),
     );
     expect(hasOwnerCredentials(full)).toBe(true);
+  });
+
+  it("treats empty-string schema defaults as unconfigured (env fallback)", () => {
+    const account = resolveAccount(
+      partial({ ownerCredentials: { clientId: "", clientSecret: "", jwt: "" } }),
+      env({ RC_USER_CLIENT_ID: "cid", RC_USER_CLIENT_SECRET: "cs", RC_USER_JWT_TOKEN: "jwt" }),
+    );
+    expect(account.ownerCredentials).toEqual({ clientId: "cid", clientSecret: "cs", jwt: "jwt" });
   });
 });
 

@@ -9,7 +9,7 @@ import { ConfigSchema, type ImRingCentralConfig } from './config.js';
 import { resolveAccount } from './ringcentral/accounts.js';
 import { bootstrapGateway } from './gateway/index.js';
 import type { DshAgentRegistry } from './session/index.js';
-import { getProfileDir, resolveEnv } from './shared/index.js';
+import { getProfileDir } from './shared/index.js';
 import { persistCredentialsToProfile, type SetupCredentials } from './setup.js';
 import type { Logger } from './types.js';
 
@@ -27,7 +27,7 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
 
   console.log('[im-ringcentral] apply() called');
 
-  let botToken = resolveEnv(config.botToken, 'RC_BOT_TOKEN');
+  let botToken = config.botToken;
 
   // ── 凭据缺失时打印指引并尝试持久化环境变量凭据 ──
   if (!botToken) {
