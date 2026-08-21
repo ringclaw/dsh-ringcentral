@@ -5,18 +5,13 @@
 #
 # 叠加顺序：dsh-base → 本 bundle patch → profile cordis.patch.yml → --patch
 #
-# 行为配置遵循 dsh 最佳实践：这里只放密钥占位（__FROM_ENV__），其余全部走
-# Config Schema 默认值；需要自定义时在 profile 自己的 cordis.patch.yml 覆盖
-# 对应条目（loader 的 !!js 标签支持环境变量求值）。
+# 密钥通过 loader 的 !!js 标签从环境变量取值（必须双感叹号，单 !js 不求值）：
+# 未设置的变量求值为 undefined，Schemastery 落到默认值 ''（视为未配置）。
+# owner 凭据（RC_USER_*）不在此声明：运行时按需从环境变量读取。
 
-# ── 插入 im-ringcentral 插件行 ──
 - insert:
     - id: im-ringcentral
       name: 'dsh-ringcentral'
       config:
-        botToken: __FROM_ENV__
-        server: __FROM_ENV__
-        ownerCredentials:
-          clientId: __FROM_ENV__
-          clientSecret: __FROM_ENV__
-          jwt: __FROM_ENV__
+        botToken: !!js process.env.RC_BOT_TOKEN
+        server: !!js process.env.RC_SERVER_URL

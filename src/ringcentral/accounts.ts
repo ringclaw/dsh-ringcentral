@@ -18,10 +18,15 @@ function readEnv(name: string, env: NodeJS.ProcessEnv): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-/** dsh 配置占位符（__FROM_ENV__ / process.env...）视为未配置，交由环境变量解析 */
-function cleanEnvPlaceholder(value: string | undefined): string | undefined {
+/**
+ * 旧版本 bundle patch 的 __FROM_ENV__ 占位符（v0.2.x 及更早）。
+ * @deprecated 自 v0.3 起由 cordis loader 的 !!js 标签取代；此判断仅作
+ * 单向兼容，计划在 v0.5 移除。空值仍视为未配置（与旧 cleanEnvPlaceholder
+ * 语义一致，保证 Schema 默认空串回退环境变量），非占位值原样透传。
+ */
+function stripLegacyEnvPlaceholder(value: string | undefined): string | undefined {
   if (!value) return undefined;
-  if (value === "__FROM_ENV__" || value.startsWith("process.env")) return undefined;
+  if (value === "__FROM_ENV__") return undefined;
   return value;
 }
 
@@ -33,9 +38,9 @@ function resolveOwnerCredentials(
   source: OwnerCredentialsConfig | undefined,
   env: NodeJS.ProcessEnv,
 ): ResolvedRingCentralOwnerCredentials | undefined {
-  const clientId = cleanEnvPlaceholder(source?.clientId) ?? readEnv("RC_USER_CLIENT_ID", env);
-  const clientSecret = cleanEnvPlaceholder(source?.clientSecret) ?? readEnv("RC_USER_CLIENT_SECRET", env);
-  const jwt = cleanEnvPlaceholder(source?.jwt) ?? readEnv("RC_USER_JWT_TOKEN", env);
+  const clientId = stripLegacyEnvPlaceholder(source?.clientId) ?? readEnv("RC_USER_CLIENT_ID", env);
+  const clientSecret = stripLegacyEnvPlaceholder(source?.clientSecret) ?? readEnv("RC_USER_CLIENT_SECRET", env);
+  const jwt = stripLegacyEnvPlaceholder(source?.jwt) ?? readEnv("RC_USER_JWT_TOKEN", env);
   return clientId && clientSecret && jwt ? { clientId, clientSecret, jwt } : undefined;
 }
 
@@ -49,12 +54,12 @@ export function resolveAccount(
   raw: ImRingCentralConfig | undefined,
   env: NodeJS.ProcessEnv = process.env,
 ): ResolvedAccount {
-  const botToken = cleanEnvPlaceholder(raw?.botToken) ?? readEnv("RC_BOT_TOKEN", env);
+  const botToken = stripLegacyEnvPlaceholder(raw?.botToken) ?? readEnv("RC_BOT_TOKEN", env);
   if (!botToken) {
     throw new Error("RingCentral bot token not configured. Set botToken in config or RC_BOT_TOKEN.");
   }
 
-  const server = cleanEnvPlaceholder(raw?.server) ?? readEnv("RC_SERVER_URL", env) ?? DEFAULT_SERVER;
+  const server = stripLegacyEnvPlaceholder(raw?.server) ?? readEnv("RC_SERVER_URL", env) ?? DEFAULT_SERVER;
   const ownerCredentials = resolveOwnerCredentials(raw?.ownerCredentials, env);
 
   const accessRaw = raw?.access;
@@ -90,7 +95,7 @@ export function isAccountConfigured(
   config: ImRingCentralConfig | undefined,
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  return !!(cleanEnvPlaceholder(config?.botToken) ?? readEnv("RC_BOT_TOKEN", env));
+  return !!(stripLegacyEnvPlaceholder(config?.botToken) ?? readEnv("RC_BOT_TOKEN", env));
 }
 
 export function hasOwnerCredentials(account: ResolvedAccount): boolean {

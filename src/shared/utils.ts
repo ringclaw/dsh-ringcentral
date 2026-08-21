@@ -54,16 +54,6 @@ export function getProfileDir(baseDir: string = PLUGIN_ROOT): string | null {
 }
 
 /**
- * 解析环境变量占位配置
- */
-export function resolveEnv(configValue: string, envKey: string): string {
-  if (configValue && configValue !== '__FROM_ENV__' && !configValue.startsWith('process.env')) {
-    return configValue;
-  }
-  return process.env[envKey] ?? '';
-}
-
-/**
  * 格式化相对时间
  */
 export function formatRelativeTime(ts?: number): string {
