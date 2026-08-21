@@ -76,9 +76,12 @@ npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 ## 配置
 
 遵循 dsh 最佳实践：**cordis 配置树是行为配置的唯一来源**（profile 的
-`cordis.patch.yml` / `cordis.yml`），Schema 默认值自动生效；插件直接读
-环境变量的只有密钥类：`RC_BOT_TOKEN`、`RC_SERVER_URL`、
-`RC_USER_CLIENT_ID`、`RC_USER_CLIENT_SECRET`、`RC_USER_JWT_TOKEN`。
+`cordis.patch.yml` / `cordis.yml`），Schema 默认值自动生效。密钥类
+（`RC_BOT_TOKEN`、`RC_USER_CLIENT_ID`、`RC_USER_CLIENT_SECRET`、
+`RC_USER_JWT_TOKEN`）通过宿主 **credentials** 域解析：config 显式值优先，
+其次环境变量 → 托管 `$DSH_HOME/.credentials.yaml` → 项目/用户 `.env`，最后
+回退进程环境变量；密钥永不写入 profile YAML。`RC_SERVER_URL` 是运营参数，
+反向前者：环境变量优先于配置默认值（便于 sandbox 覆盖）。
 其余配置想用环境变量驱动时，用 cordis loader 的 `!!js` 标签（必须双
 感叹号，单 `!js` 不会求值），例如
 `access.groupMode: !!js process.env.RC_GROUP_MODE ?? 'open'`。
@@ -186,7 +189,7 @@ TypeScript 入口）。
 
 | 现象 | 可能原因 | 修复 |
 | --- | --- | --- |
-| 插件未启动 | 缺少 `RC_BOT_TOKEN` | 设置 `RC_BOT_TOKEN` 或在 `cordis.patch.yml` 配置 `botToken` |
+| 插件未启动 | 缺少 `RC_BOT_TOKEN` | 设置 `RC_BOT_TOKEN`（环境变量或 `$DSH_HOME/.credentials.yaml`）或在 config 配置 `botToken` |
 | 群聊中 bot 不回复 | `access.groupMode: disabled`、未在白名单或未 @ | 检查 `access.groupMode` / `access.groupAllow` 并 @bot |
 | 私聊被忽略 | `access.dmMode: disabled` 或发送者不在 `access.dmAllow` | 检查 `access.dmMode` / `access.dmAllow` |
 | 历史工具返回空 | 目标聊天对 bot 与 owner 均不可见 | 读取链 bot 优先、owner 回退；传裸 chat id 或 `channel:<chatId>`，并确认至少一个客户端是该聊天成员 |

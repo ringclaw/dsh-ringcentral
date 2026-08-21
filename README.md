@@ -86,11 +86,15 @@ client (chats the bot is a member of).
 
 Config follows dsh practice: **the cordis config tree is the single source**
 (profile `cordis.patch.yml` / `cordis.yml`), with Schema defaults applied
-automatically. The plugin reads environment variables directly only for
-secrets: `RC_BOT_TOKEN`, `RC_SERVER_URL`, `RC_USER_CLIENT_ID`,
-`RC_USER_CLIENT_SECRET`, `RC_USER_JWT_TOKEN`. To drive any other setting
-from an environment variable, use the cordis loader's `!!js` tag (double
-bang — a single `!js` is not evaluated), e.g.
+automatically. Secrets (`RC_BOT_TOKEN`, `RC_USER_CLIENT_ID`,
+`RC_USER_CLIENT_SECRET`, `RC_USER_JWT_TOKEN`) resolve through the host
+**credentials** domain — an explicit config value wins, then environment →
+managed `$DSH_HOME/.credentials.yaml` → project/user `.env`, with the plain
+process environment as the final fallback. `RC_SERVER_URL` works the other
+way for operational overrides (e.g. sandbox): the environment value wins over
+the configured/default server. Secrets are never persisted into profile YAML.
+To drive any other setting from an environment variable, use the cordis
+loader's `!!js` tag (double bang — a single `!js` is not evaluated), e.g.
 `access.groupMode: !!js process.env.RC_GROUP_MODE ?? 'open'`.
 
 The access-control block mirrors `@tencent-connect/dsh-qqbot` exactly
@@ -199,7 +203,7 @@ with the entry resolved to an absolute path on the machine (default
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| Plugin not starting | `RC_BOT_TOKEN` missing | Set `RC_BOT_TOKEN` or `botToken` in `cordis.patch.yml` |
+| Plugin not starting | `RC_BOT_TOKEN` missing | Set `RC_BOT_TOKEN` (env or `$DSH_HOME/.credentials.yaml`) or `botToken` in config |
 | Bot never replies in a group chat | `access.groupMode: disabled`, not allowlisted, or no mention | Check `access.groupMode` / `access.groupAllow` and `@`-mention the bot |
 | DM ignored | `access.dmMode: disabled` or sender not in `access.dmAllow` | Check `access.dmMode` / `access.dmAllow` |
 | History tool returns nothing | Chat not visible to bot or owner | Reads try the bot first, then the owner; pass a bare chat id or `channel:<chatId>` and make sure one client is a member |
