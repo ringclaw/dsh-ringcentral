@@ -79,8 +79,9 @@ npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 `cordis.patch.yml` / `cordis.yml`），Schema 默认值自动生效；插件直接读
 环境变量的只有密钥类：`RC_BOT_TOKEN`、`RC_SERVER_URL`、
 `RC_USER_CLIENT_ID`、`RC_USER_CLIENT_SECRET`、`RC_USER_JWT_TOKEN`。
-其余配置想用环境变量驱动时，用 cordis 的 `${VAR}` 插值，例如
-`access.groupMode: ${RC_GROUP_MODE:-open}`。
+其余配置想用环境变量驱动时，用 cordis loader 的 `!!js` 标签（必须双
+感叹号，单 `!js` 不会求值），例如
+`access.groupMode: !!js process.env.RC_GROUP_MODE ?? 'open'`。
 
 访问控制块与 `@tencent-connect/dsh-qqbot` 完全一致（QQ 的 `c2c` 表面
 在这里叫 `dm`）。RingCentral 的三种非私聊聊天类型（Team / Everyone /

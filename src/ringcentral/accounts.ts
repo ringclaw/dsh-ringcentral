@@ -3,9 +3,9 @@
  *
  * dsh 最佳实践：行为配置只来自 cordis 配置树（Schemastery 已填默认值），
  * 插件只直接读密钥类环境变量：RC_BOT_TOKEN / RC_USER_* / RC_SERVER_URL。
- * 需要环境变量驱动的行为配置，请用 cordis 的 ${VAR} 插值写在 cordis.yml /
- * cordis.patch.yml 里（参考 cordis.yml 注释示例），不要在插件里再维护一套
- * RC_* 环境变量命名空间——那会与配置字段重复。
+ * 需要环境变量驱动的行为配置，请用 cordis loader 的 !!js 标签写在
+ * cordis.yml / cordis.patch.yml 里（参考 cordis.yml 注释示例），不要在插件里
+ * 再维护一套 RC_* 环境变量命名空间——那会与配置字段重复。
  */
 import type { ImRingCentralConfig, OwnerCredentialsConfig } from "../config.js";
 import { DEFAULT_SERVER } from "./shared.js";

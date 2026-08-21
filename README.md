@@ -89,8 +89,9 @@ Config follows dsh practice: **the cordis config tree is the single source**
 automatically. The plugin reads environment variables directly only for
 secrets: `RC_BOT_TOKEN`, `RC_SERVER_URL`, `RC_USER_CLIENT_ID`,
 `RC_USER_CLIENT_SECRET`, `RC_USER_JWT_TOKEN`. To drive any other setting
-from an environment variable, use cordis `${VAR}` interpolation in your
-config, e.g. `access.groupMode: ${RC_GROUP_MODE:-open}`.
+from an environment variable, use the cordis loader's `!!js` tag (double
+bang — a single `!js` is not evaluated), e.g.
+`access.groupMode: !!js process.env.RC_GROUP_MODE ?? 'open'`.
 
 The access-control block mirrors `@tencent-connect/dsh-qqbot` exactly
 (QQ's `c2c` surface is `dm` here). RingCentral's three non-DM chat types

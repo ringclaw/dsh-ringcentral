@@ -7,7 +7,7 @@
 #
 # 行为配置遵循 dsh 最佳实践：这里只放密钥占位（__FROM_ENV__），其余全部走
 # Config Schema 默认值；需要自定义时在 profile 自己的 cordis.patch.yml 覆盖
-# 对应条目（支持 ${VAR} 环境变量插值）。
+# 对应条目（loader 的 !!js 标签支持环境变量求值）。
 
 # ── 插入 im-ringcentral 插件行 ──
 - insert:
