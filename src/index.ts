@@ -8,7 +8,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings';
 import { ConfigSchema, type ImRingCentralConfig } from './config.js';
 import { resolveAccount } from './ringcentral/accounts.js';
-import { resolveSecret, installCredentialsInjection } from './ringcentral/credentials.js';
+import { resolveSecret, installCredentialsInjection, watchManagedCredentialsFile } from './ringcentral/credentials.js';
 import type { ResolvedAccount } from './ringcentral/types.js';
 import { mergeLiveConfig } from './settings-merge.js';
 import { debugLog } from './debug-log.js';
@@ -63,6 +63,8 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
           const resolved = liveResolved();
           mergeLiveConfig(config, resolved);
           if (accountRef) mergeLiveConfig(accountRef.config, resolved);
+          // 密钥可能随 settings 变更（GUI 密钥保存路径）：调度热换（rotate 内对比无变化即 no-op）
+          scheduleRotation('settings/updated');
           if (resolved.debug) {
             logger.debug(
               'im-ringcentral: settings 已合并: access=' + JSON.stringify(resolved.access) +
@@ -144,12 +146,13 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
     ? { clientId: ownerClientId, clientSecret: ownerClientSecret, jwt: ownerJwt }
     : undefined;
 
-  // ── 凭据变更提示：当前架构在启动时解析凭据，热换需重启（live rotation 待后续） ──
+  // ── 凭据变更：触发热换调度（1s debounce 合并三源事件） ──
   const eventCtx = ctx as unknown as { on(event: string, handler: (...args: unknown[]) => void): void };
   eventCtx.on('credentials/updated', (ref: unknown) => {
     const key = typeof ref === 'string' ? ref : String(ref);
     if (key === 'RC_BOT_TOKEN' || key.startsWith('RC_USER_')) {
-      logger.warn('im-ringcentral: 凭据 ' + key + ' 已更新；本插件在启动时解析凭据，重启后生效');
+      logger.info('im-ringcentral: 凭据 ' + key + ' 已更新，调度热换');
+      scheduleRotation('credentials/updated');
     }
   });
 
@@ -168,11 +171,75 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
     return;
   }
 
+  let rotation: { rotate(secrets: import('./gateway/bootstrap.js').RotationSecrets): Promise<boolean> } | undefined;
   try {
-    await bootstrapGateway(ctx, agents, account, config, logger);
+    rotation = await bootstrapGateway(ctx, agents, account, config, logger);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('im-ringcentral: gateway bootstrap failed: ' + message);
     debugLog(true, '[boot] gateway bootstrap FAILED: ' + message);
+    return;
+  }
+
+  // ── 凭据热换：三源事件 → debounce(1s) → 单飞 → 全量轮换 ──
+  const resolveRotationSecrets = async (): Promise<import('./gateway/bootstrap.js').RotationSecrets> => {
+    const nextBot = (await explicitOr(config.botToken, 'RC_BOT_TOKEN')) ??
+      await settingsSecret((cfg) => cfg.botToken);
+    const [cid, cs, jwt] = await Promise.all([
+      (await explicitOr(config.ownerCredentials?.clientId, 'RC_USER_CLIENT_ID')) ??
+        await settingsSecret((cfg) => cfg.ownerCredentials?.clientId),
+      (await explicitOr(config.ownerCredentials?.clientSecret, 'RC_USER_CLIENT_SECRET')) ??
+        await settingsSecret((cfg) => cfg.ownerCredentials?.clientSecret),
+      (await explicitOr(config.ownerCredentials?.jwt, 'RC_USER_JWT_TOKEN')) ??
+        await settingsSecret((cfg) => cfg.ownerCredentials?.jwt),
+    ]);
+    const nextServer = (await resolveSecret(ctx, 'RC_SERVER_URL', logger, credentialsLive)) ?? config.server;
+    return {
+      botToken: nextBot,
+      server: nextServer,
+      ownerCredentials: cid && cs && jwt ? { clientId: cid, clientSecret: cs, jwt } : undefined,
+    };
+  };
+
+  let rotationTimer: ReturnType<typeof setTimeout> | undefined;
+  let rotationInFlight: Promise<boolean> | undefined;
+  const runRotation = async (source: string): Promise<boolean> => {
+    if (rotationInFlight) return rotationInFlight;
+    rotationInFlight = (async (): Promise<boolean> => {
+      try {
+        const secrets = await resolveRotationSecrets();
+        if (!secrets.botToken) {
+          debugLog(true, '[rotate] source=' + source + ' — no token resolved, skipping');
+          return false;
+        }
+        return await rotation.rotate(secrets);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.warn('im-ringcentral: rotation failed: ' + message);
+        debugLog(true, '[rotate] FAILED: ' + message);
+        return false;
+      } finally {
+        rotationInFlight = undefined;
+      }
+    })();
+    return rotationInFlight;
+  };
+  const scheduleRotation = (source: string): void => {
+    debugLog(config.debug, '[rotate] scheduled (source=' + source + ')');
+    if (rotationTimer) clearTimeout(rotationTimer);
+    rotationTimer = setTimeout(() => {
+      rotationTimer = undefined;
+      void runRotation(source);
+    }, 1000);
+  };
+
+  // settings 变更（含 GUI 密钥保存）：已有 onChange 内追加调度
+  // credentials/updated 事件：替换为调度（见上方监听器）
+  // 托管文件直读场景：轮询 watcher
+  try {
+    (ctx as unknown as { effect(fn: () => (() => void) | void, name?: string): void })
+      .effect(() => watchManagedCredentialsFile(() => scheduleRotation('file')), 'im-ringcentral.credentials-watch');
+  } catch (err) {
+    logger.warn('im-ringcentral: credentials file watch failed: ' + (err instanceof Error ? err.message : String(err)));
   }
 }

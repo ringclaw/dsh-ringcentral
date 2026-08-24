@@ -6,8 +6,10 @@ import { ANSWER_START } from "./shared.js";
 import type { Post, WSEvent } from "./types.js";
 
 export interface MonitorOptions {
-  client: RingCentralClient;
-  ownCreatorId?: string;
+  /** 固定客户端或「连接时求值」的提供者——凭据轮换后下次连接自动用新凭据 */
+  client: RingCentralClient | (() => RingCentralClient);
+  /** 自身 creator id 或「处理时求值」的提供者（bot 身份轮换后同步更新） */
+  ownCreatorId?: string | (() => string | undefined);
   filterOwnCreator?: boolean;
   ignoredTexts?: readonly string[];
   onMessage: (post: Post) => void;
@@ -27,6 +29,7 @@ const OWN_POST_TTL_MS = 300_000;
 export class RingCentralWebSocketMonitor {
   private readonly sentPosts = new Map<string, number>();
   private failures = 0;
+  private activeCleanup: (() => void) | undefined;
 
   constructor(private readonly opts: MonitorOptions) {}
 
@@ -34,6 +37,11 @@ export class RingCentralWebSocketMonitor {
     if (postId) {
       this.sentPosts.set(postId, Date.now());
     }
+  }
+
+  /** 请求立即重连：关闭当前连接，既有退避循环会以最新凭据重新建立订阅 */
+  reconnect(): void {
+    this.activeCleanup?.();
   }
 
   async start(): Promise<void> {
@@ -56,7 +64,9 @@ export class RingCentralWebSocketMonitor {
   }
 
   private async connectAndListen(log: (...args: unknown[]) => void): Promise<void> {
-    const { client, onConnected, onDiagnostic, abortSignal } = this.opts;
+    const { onConnected, onDiagnostic, abortSignal } = this.opts;
+    // 每次连接时求值客户端：凭据轮换后重连即用新凭据
+    const client = typeof this.opts.client === "function" ? this.opts.client() : this.opts.client;
     const wsToken = await client.createWebSocketToken();
     const ws = new WebSocket(buildWebSocketUrl(wsToken));
     let pongTimer: ReturnType<typeof setTimeout> | undefined;
@@ -72,6 +82,7 @@ export class RingCentralWebSocketMonitor {
         // ignore close races
       }
     };
+    this.activeCleanup = cleanup;
     const onAbort = () => {
       cleanup();
     };
@@ -179,9 +190,12 @@ export class RingCentralWebSocketMonitor {
 
   private handlePost(post: Post, log: (...args: unknown[]) => void): void {
     pruneSentPosts(this.sentPosts);
+    const ownCreatorId = typeof this.opts.ownCreatorId === "function"
+      ? this.opts.ownCreatorId()
+      : this.opts.ownCreatorId;
     if (!shouldProcessPost(post, {
       sentPosts: this.sentPosts,
-      ownCreatorId: this.opts.ownCreatorId,
+      ownCreatorId,
       filterOwnCreator: this.opts.filterOwnCreator,
       ignoredTexts: this.opts.ignoredTexts,
     })) {
