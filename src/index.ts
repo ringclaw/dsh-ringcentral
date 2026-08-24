@@ -129,14 +129,17 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
   // 保证 sandbox 等场景的 RC_SERVER_URL 覆盖始终生效。
   const server = (await resolveSecret(ctx, 'RC_SERVER_URL', logger, credentialsLive)) ?? config.server;
 
-  const [ownerClientId, ownerClientSecret, ownerJwt] = await Promise.all([
-    (await explicitOr(config.ownerCredentials?.clientId, 'RC_USER_CLIENT_ID')) ??
-      await settingsSecret((cfg) => cfg.ownerCredentials?.clientId),
-    (await explicitOr(config.ownerCredentials?.clientSecret, 'RC_USER_CLIENT_SECRET')) ??
-      await settingsSecret((cfg) => cfg.ownerCredentials?.clientSecret),
-    (await explicitOr(config.ownerCredentials?.jwt, 'RC_USER_JWT_TOKEN')) ??
-      await settingsSecret((cfg) => cfg.ownerCredentials?.jwt),
+  const [ownerClientIdRaw, ownerClientSecretRaw, ownerJwtRaw] = await Promise.all([
+    explicitOr(config.ownerCredentials?.clientId, 'RC_USER_CLIENT_ID'),
+    explicitOr(config.ownerCredentials?.clientSecret, 'RC_USER_CLIENT_SECRET'),
+    explicitOr(config.ownerCredentials?.jwt, 'RC_USER_JWT_TOKEN'),
   ]);
+  const ownerClientId = ownerClientIdRaw ??
+    await settingsSecret((cfg) => cfg.ownerCredentials?.clientId);
+  const ownerClientSecret = ownerClientSecretRaw ??
+    await settingsSecret((cfg) => cfg.ownerCredentials?.clientSecret);
+  const ownerJwt = ownerJwtRaw ??
+    await settingsSecret((cfg) => cfg.ownerCredentials?.jwt);
   const ownerCredentials = ownerClientId && ownerClientSecret && ownerJwt
     ? { clientId: ownerClientId, clientSecret: ownerClientSecret, jwt: ownerJwt }
     : undefined;
