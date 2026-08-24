@@ -128,13 +128,17 @@ export function readManagedCredentialsFile(
 }
 
 /**
- * 轮询托管凭据文件（2s 间隔，跨平台安全）：mtime 变化时回调——覆盖
+ * 轮询托管凭据文件（默认 2s 间隔，跨平台安全）：mtime 变化时回调——覆盖
  * 「服务不可达、直接读文件」场景下的热换检测。返回 disposer，异常静默。
+ * intervalMs 可注入以便测试。
  */
-export function watchManagedCredentialsFile(onChange: () => void): () => void {
+export function watchManagedCredentialsFile(
+  onChange: () => void,
+  intervalMs = 2000,
+): () => void {
   const file = managedCredentialsPath();
   try {
-    watchFile(file, { interval: 2000 }, (curr, prev) => {
+    watchFile(file, { interval: intervalMs }, (curr, prev) => {
       if (curr.mtimeMs !== prev.mtimeMs) onChange();
     });
     return () => {

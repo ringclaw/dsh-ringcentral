@@ -54,4 +54,18 @@ describe("mergeLiveConfig", () => {
     expect(target.botToken).toBe("runtime-token");
     expect(target.ownerCredentials).toEqual({ clientId: "", clientSecret: "", jwt: "" });
   });
+
+  it("merges the server override (sandbox switch)", () => {
+    const target = runtimeConfig();
+    const resolved = runtimeConfig({ server: "https://platform.devtest.ringcentral.com" });
+    mergeLiveConfig(target, resolved);
+    expect(target.server).toBe("https://platform.devtest.ringcentral.com");
+  });
+
+  it("merges processingPlaceholder.enabled", () => {
+    const target = runtimeConfig();
+    const resolved = runtimeConfig({ processingPlaceholder: { enabled: true } });
+    mergeLiveConfig(target, resolved);
+    expect(target.processingPlaceholder).toEqual({ enabled: true });
+  });
 });
