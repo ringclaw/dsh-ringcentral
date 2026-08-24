@@ -8,6 +8,7 @@
 import type { Context } from '@deepseek-ai/cordis';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
 import type { Logger } from '../types.js';
+import { debugLog } from '../debug-log.js';
 
 /** 宿主 credentials 服务的最小消费面（可选依赖，未挂载时回退环境变量） */
 interface CredentialsServiceLike {
@@ -29,15 +30,21 @@ export async function resolveSecret(
   } catch {
     credentials = undefined;
   }
+  debugLog(true,
+    '[cred] ' + name + ': service=' + (credentials ? 'present' : 'absent') +
+    ' env=' + (process.env[name] ? 'present' : 'absent'),
+  );
   if (credentials && typeof credentials.resolve === 'function') {
     try {
       const resolved = await credentials.resolve(credentialRef(name));
+      debugLog(true, '[cred] ' + name + ': credentials.resolve -> ' + (resolved?.value ? 'value(source=' + resolved.source + ')' : 'empty'));
       if (resolved?.value) return resolved.value;
     } catch (err) {
       logger.warn(
         'im-ringcentral: credentials.resolve(' + name + ') failed: ' +
           (err instanceof Error ? err.message : String(err)),
       );
+      debugLog(true, '[cred] ' + name + ': resolve FAILED: ' + (err instanceof Error ? err.message : String(err)));
     }
   }
   const envValue = process.env[name];
