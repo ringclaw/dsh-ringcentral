@@ -1,6 +1,6 @@
 {
   "name": "dsh-ringcentral",
-  "version": "0.3.18",
+  "version": "0.3.19",
   "description": "RingCentral Team Messaging IM channel plugin for deepseek-harness (dsh)",
   "type": "module",
   "main": "./dist/index.js",
