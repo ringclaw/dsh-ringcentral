@@ -11,7 +11,7 @@
  * 路径：inject 注入的服务（标准部署）与直接读取托管凭据文件
  * $DSH_HOME/.credentials.yaml（兜底，GUI 密钥卡片写入的正是该文件）。
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, watchFile, unwatchFile } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Context } from '@deepseek-ai/cordis';
@@ -125,6 +125,28 @@ export function readManagedCredentialsFile(
     }
   }
   return refs;
+}
+
+/**
+ * 轮询托管凭据文件（2s 间隔，跨平台安全）：mtime 变化时回调——覆盖
+ * 「服务不可达、直接读文件」场景下的热换检测。返回 disposer，异常静默。
+ */
+export function watchManagedCredentialsFile(onChange: () => void): () => void {
+  const file = managedCredentialsPath();
+  try {
+    watchFile(file, { interval: 2000 }, (curr, prev) => {
+      if (curr.mtimeMs !== prev.mtimeMs) onChange();
+    });
+    return () => {
+      try {
+        unwatchFile(file);
+      } catch {
+        // 忽略清理失败
+      }
+    };
+  } catch {
+    return () => undefined;
+  }
 }
 
 /**

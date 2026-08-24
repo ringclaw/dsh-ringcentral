@@ -123,8 +123,10 @@ Group）统一归入 `group` 表面管理。
 - 上表全部非密钥配置可直接编辑；保存后**下一条 IM 消息即生效**（无需重启），
   每个字段可单独 Reset 回组合层默认值；
 - 四个密钥（`RC_BOT_TOKEN`、`RC_USER_*`）以**只写**控件呈现：卡片只显示
-  是否已配置，写入走宿主 credentials 域（`$DSH_HOME/.credentials.yaml`），
-  密钥值永不回传页面。更换密钥后仍需重启插件生效（见设计原则）。
+  是否已配置，写入走 settings 域（credentials 域可达时优先其写入），
+  密钥值永不回传页面。密钥变更**实时生效**：约 1 秒内重建 REST 客户端并
+  以新凭据重连 websocket——无需重启，且会话上下文不丢（account key 由
+  稳定的 bot 身份派生，同 bot 轮换不变）。
 
 未挂载 settings 服务（自建精简 cordis.yml）时卡片不出现，插件行为与之前
 完全一致。

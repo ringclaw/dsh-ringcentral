@@ -40,12 +40,14 @@
 |---|---|
 | 0.3.15 | `resolveSecret` 增加托管凭据文件直读兜底（`$DSH_HOME/.credentials.yaml` 的 refs 映射），服务不可达时插件照常启动 |
 | 0.3.17 | `installCredentialsInjection`：用 `ctx.inject(['credentials'])` 跨边界取服务，注入成功后自动优先并保持每次操作重解析；`tools` / `userQuestions` 同样 inject 化，恢复桌面端历史工具与 IM 问答面注册 |
+| 0.3.19 | GUI 密钥控件改走 settings 写入路径（credentials 域不可达部署的保存闭环）；宿主启动解析增加 settings 密钥兜底 |
+| 0.4.0 | 密钥热换：credentials/updated + settings/updated + 托管文件轮询三源 → 1s debounce → 重建 REST 客户端、重连 websocket、重建历史工具；account key 改为稳定 bot 身份派生，轮换不丢会话上下文 |
 
-解析链（0.3.17 起）：
+解析链（0.3.19 起）：
 
 ```
 config 显式值 → inject 注入的 credentials 服务 → ctx.get 可见服务
-→ 进程环境变量 → 托管凭据文件直读
+→ 进程环境变量 → 托管凭据文件直读 → settings user 层
 ```
 
 ## 验证清单

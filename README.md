@@ -138,9 +138,11 @@ the plugin registers a settings namespace and a configuration card under
   to the composed profile layer;
 - renders the four secrets (`RC_BOT_TOKEN`, `RC_USER_*`) as **write-only**
   controls: it reports only whether each is configured and writes through the
-  host credentials domain (`$DSH_HOME/.credentials.yaml`); secret values are
-  never sent back to the page. Rotated credentials still take effect after a
-  plugin restart (see Design principles).
+  settings domain (fallback to the host credentials domain where reachable);
+  secret values are never sent back to the page. Credential changes apply
+  **live**: within ~1s the plugin rebuilds its REST clients and reconnects the
+  websocket with the new token — no restart, and the per-peer session context
+  survives rotation (the account key derives from the stable bot identity).
 
 Without a settings service (a bare custom `cordis.yml`), the card simply does
 not mount and the plugin behaves exactly as before.

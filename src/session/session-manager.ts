@@ -54,7 +54,7 @@ export class SessionManager {
     private readonly ctx: Context,
     private readonly agents: DshAgentRegistry,
     private readonly config: ImRingCentralConfig,
-    private readonly accountKey: string,
+    private accountKey: string,
     private readonly logger: Logger,
   ) {
     this.modelResolver = new ModelResolver(ctx, config, logger);
@@ -69,6 +69,17 @@ export class SessionManager {
         void record.handle.dispose().catch(() => {});
       },
     );
+  }
+
+  /**
+   * 凭据轮换后更新 account key（换 bot 时新消息路由到新会话命名空间；
+   * 同 bot 轮换因 key 稳定而保持上下文）。旧 key 下的会话保留至闲置回收。
+   */
+  setAccountKey(next: string): void {
+    if (next !== this.accountKey) {
+      this.logger.info('im-ringcentral: account key changed (' + this.accountKey + ' → ' + next + ')');
+      this.accountKey = next;
+    }
   }
 
   /**

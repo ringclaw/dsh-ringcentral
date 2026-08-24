@@ -422,11 +422,19 @@ function raceWithTimeout<T>(promise: Promise<T>, ms: number, message: string): P
   });
 }
 
-function buildAccountScopeKey(params: {
+/**
+ * 会话作用域 key。优先用稳定身份（bot 扩展 id）——凭据轮换时 key 不变，
+ * 会话上下文得以保留；无稳定身份时回退到凭据指纹（历史行为）。
+ */
+export function buildAccountScopeKey(params: {
   serverUrl: string;
   botToken?: string;
   ownerCredentials?: ResolvedRingCentralOwnerCredentials;
+  stableIdentity?: string;
 }): string {
+  if (params.stableIdentity) {
+    return JSON.stringify([params.serverUrl, "id:" + params.stableIdentity]);
+  }
   const credentialIdentity = params.botToken
     ? "bot:" + credentialFingerprint(params.botToken)
     : params.ownerCredentials

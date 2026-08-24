@@ -15,9 +15,9 @@ import { buildCommandList, isCommandText, matchCommand } from '../commands/index
 import { createHistoryTool } from '../history-tool.js';
 import type { ImRingCentralConfig } from '../config.js';
 import type { Logger, ReplyTarget } from '../types.js';
-import type { ResolvedAccount } from '../ringcentral/types.js';
+import type { ResolvedAccount, ResolvedRingCentralOwnerCredentials } from '../ringcentral/types.js';
 import type { Post } from '../ringcentral/types.js';
-import { RingCentralClient, createBotClient, createOwnerClient } from '../ringcentral/client.js';
+import { RingCentralClient, createBotClient, createOwnerClient, buildAccountScopeKey } from '../ringcentral/client.js';
 import { RingCentralWebSocketMonitor } from '../ringcentral/monitor.js';
 import { handleInboundPost } from '../ringcentral/inbound.js';
 import { RingCentralUserQuestionsProvider } from '../ringcentral/user-questions.js';
@@ -31,19 +31,30 @@ import { PROCESSING_PLACEHOLDER_DELAYED_TEXT, PROCESSING_PLACEHOLDER_INITIAL_TEX
 /** 每 peer 待处理队列上限的清理水位（超过时丢弃最旧任务） */
 const MAX_PENDING_PER_PEER = 64;
 
+/** 凭据轮换输入：index.ts 每次变更时用完整解析链重算后传入 */
+export interface RotationSecrets {
+  botToken?: string;
+  server?: string;
+  ownerCredentials?: ResolvedRingCentralOwnerCredentials;
+}
+
+/** bootstrap 返回的轮换句柄 */
+export interface RotationHandle {
+  rotate(secrets: RotationSecrets): Promise<boolean>;
+}
+
 export async function bootstrapGateway(
   ctx: Context,
   agents: DshAgentRegistry,
   account: ResolvedAccount,
   config: ImRingCentralConfig,
   logger: Logger,
-): Promise<void> {
+): Promise<RotationHandle> {
   debugLog(config.debug, '[gateway] bootstrap start');
   const botClient = createBotClient(account.server, account.botToken);
   const ownerClient = account.ownerCredentials
     ? createOwnerClient(account.server, account.ownerCredentials.clientId, account.ownerCredentials.clientSecret, account.ownerCredentials.jwt)
     : undefined;
-  const accountKey = botClient.getAccountScopeKey();
 
   // ── bot person id（过滤自身回声 / mention 检测；自动探测，失败仅告警） ──
   let botPersonId: string | undefined;
@@ -55,10 +66,25 @@ export async function bootstrapGateway(
     debugLog(config.debug, '[gateway] botPersonId resolution failed (self-echo filtering degraded)');
   }
 
+  // ── 可变运行时对象：凭据轮换时原子替换客户端，闭包按调用时读取 ──
+  // accountKey 优先用稳定身份（bot 扩展 id）派生——同 bot 轮换 token 时
+  // 会话 key 不变、上下文保留；解析失败回退 token 指纹（历史行为）。
+  const runtime = {
+    server: account.server,
+    botToken: account.botToken,
+    botClient,
+    ownerClient,
+    botPersonId,
+    accountKey: botPersonId
+      ? buildAccountScopeKey({ serverUrl: account.server, stableIdentity: botPersonId })
+      : botClient.getAccountScopeKey(),
+    account,
+  };
+
   const tracker = new ThreadParticipationTracker();
   const monitors: RingCentralWebSocketMonitor[] = [];
   const seenPostIds = new Set<string>();
-  const manager = new SessionManager(ctx, agents, config, accountKey, logger);
+  const manager = new SessionManager(ctx, agents, config, runtime.accountKey, logger);
   const commands = buildCommandList({ manager, config });
 
   // ── 出站发送适配器 ──
@@ -72,8 +98,8 @@ export async function bootstrapGateway(
   const sender: RingCentralSender = {
     send: async (opts) =>
       sendMessage({
-        client: botClient,
-        fallbackClient: ownerClient,
+        client: runtime.botClient,
+        fallbackClient: runtime.ownerClient,
         chatId: opts.chatId,
         text: opts.text,
         replyToId: opts.replyToId,
@@ -83,8 +109,8 @@ export async function bootstrapGateway(
         convertMarkdown: opts.convertMarkdown ?? true,
       }),
     update: (chatId, postId, text, convertMarkdown = true) =>
-      updateMessage(botClient, chatId, postId, text, convertMarkdown),
-    remove: (chatId, postId) => deleteMessage(botClient, chatId, postId),
+      updateMessage(runtime.botClient, chatId, postId, text, convertMarkdown),
+    remove: (chatId, postId) => deleteMessage(runtime.botClient, chatId, postId),
   };
 
   let toolsRegistry: ToolsRegistryLike | undefined;
@@ -102,7 +128,7 @@ export async function bootstrapGateway(
     if (historyRegistered || !toolsRegistry) return;
     historyRegistered = true; // 失败时回置，允许服务就绪后重试
     try {
-      const tool = await createHistoryTool({ account, ownerClient, botClient });
+      const tool = await createHistoryTool({ account: runtime.account, ownerClient: runtime.ownerClient, botClient: runtime.botClient });
       if (tool) {
         const registry = toolsRegistry as unknown as { register(definition: unknown): () => void };
         unregisterHistoryTool = registry.register(tool);
@@ -162,19 +188,19 @@ export async function bootstrapGateway(
   };
 
   const getPersonInfo = async (personId: string) => {
-    const client: RingCentralClient = ownerClient ?? botClient;
+    const client: RingCentralClient = runtime.ownerClient ?? runtime.botClient;
     return await client.getPersonInfo(personId).catch(() => null);
   };
 
   const getChatInfo = async (chatId: string) => {
-    return await botClient.getChat(chatId).catch(() => null);
+    return await runtime.botClient.getChat(chatId).catch(() => null);
   };
 
   const downloadAttachments = async (post: Post) =>
     resolveInboundAttachmentsForAgent({
       attachments: post.attachments,
-      primaryClient: botClient,
-      fallbackClient: ownerClient,
+      primaryClient: runtime.botClient,
+      fallbackClient: runtime.ownerClient,
       cwd: config.cwd || process.cwd(),
       messageId: post.id,
       log,
@@ -197,8 +223,8 @@ export async function bootstrapGateway(
   const handlePost = async (post: Post): Promise<void> => {
     const decision = await handleInboundPost({
       post,
-      account,
-      botPersonId,
+      account: runtime.account,
+      botPersonId: runtime.botPersonId,
       tracker,
       log,
       getPersonInfo,
@@ -346,6 +372,70 @@ export async function bootstrapGateway(
     logger.warn('im-ringcentral: userQuestions inject failed: ' + (err instanceof Error ? err.message : String(err)));
   }
 
+  // ── 凭据轮换：先建新对象、再一次原子替换，避免中间态 ──
+  const rotate = async (secrets: RotationSecrets): Promise<boolean> => {
+    const nextToken = secrets.botToken?.trim();
+    if (!nextToken) {
+      logger.warn('im-ringcentral: rotation skipped — no bot token in new secrets');
+      debugLog(config.debug, '[rotate] skipped (no bot token)');
+      return false;
+    }
+    if (nextToken === runtime.botToken) {
+      debugLog(config.debug, '[rotate] no change');
+      return true;
+    }
+    const nextServer = (secrets.server ?? runtime.server).replace(/\/$/, '');
+    const nextBot = createBotClient(nextServer, nextToken);
+    const nextOwner = secrets.ownerCredentials
+      ? createOwnerClient(nextServer, secrets.ownerCredentials.clientId, secrets.ownerCredentials.clientSecret, secrets.ownerCredentials.jwt)
+      : undefined;
+
+    // bot 身份重解析（失败保留旧值，回退旧 token 指纹 key 的语义不变）
+    let nextPersonId = runtime.botPersonId;
+    try {
+      nextPersonId = String((await nextBot.getExtensionInfo()).id);
+    } catch (err) {
+      logger.warn('im-ringcentral: rotation botPersonId re-resolution failed: ' + (err instanceof Error ? err.message : String(err)));
+    }
+
+    // 原子替换运行时
+    runtime.server = nextServer;
+    runtime.botToken = nextToken;
+    runtime.botClient = nextBot;
+    runtime.ownerClient = nextOwner;
+    runtime.botPersonId = nextPersonId;
+
+    // 身份变化（换 bot）时切换会话命名空间；同 bot 轮换 key 稳定、上下文保留
+    if (nextPersonId) {
+      const nextKey = buildAccountScopeKey({ serverUrl: nextServer, stableIdentity: nextPersonId });
+      if (nextKey !== runtime.accountKey) {
+        runtime.accountKey = nextKey;
+        manager.setAccountKey(nextKey);
+      }
+    }
+
+    // 历史工具重建（新客户端）
+    if (unregisterHistoryTool) {
+      try {
+        unregisterHistoryTool();
+      } catch {
+        // 注销失败不阻塞轮换
+      }
+      unregisterHistoryTool = undefined;
+    }
+    historyRegistered = false;
+    void registerHistoryTool();
+
+    // 主动重连 websocket：bot monitor 下次连接即用新凭据
+    for (const monitor of monitors) {
+      monitor.reconnect();
+    }
+
+    logger.info('[ringcentral] credentials rotated: bot client rebuilt');
+    debugLog(config.debug, '[rotate] bot client rebuilt (token changed)');
+    return true;
+  };
+
   // ── 生命周期 ──
   debugLog(config.debug, '[gateway] core ready, registering lifecycle effect');
   (ctx as unknown as { effect(fn: () => (() => Promise<void>) | void, name?: string): void })
@@ -357,10 +447,10 @@ export async function bootstrapGateway(
         PROCESSING_PLACEHOLDER_DELAYED_TEXT,
       ];
 
-      // bot 订阅（过滤自身 post）
+      // bot 订阅（过滤自身 post）——client/ownCreatorId 用 getter：轮换后重连即用新凭据
       const botMonitor = new RingCentralWebSocketMonitor({
-        client: botClient,
-        ownCreatorId: botPersonId,
+        client: () => runtime.botClient,
+        ownCreatorId: () => runtime.botPersonId,
         filterOwnCreator: true,
         ignoredTexts,
         abortSignal: controller.signal,
@@ -387,7 +477,7 @@ export async function bootstrapGateway(
       // owner 订阅（读历史；不过滤 owner 自身，用于 owner 在任意会话的发言）
       if (ownerClient) {
         const ownerMonitor = new RingCentralWebSocketMonitor({
-          client: ownerClient,
+          client: () => runtime.ownerClient ?? ownerClient,
           ownCreatorId: undefined,
           filterOwnCreator: false,
           ignoredTexts,
@@ -435,4 +525,6 @@ export async function bootstrapGateway(
         monitors.length = 0;
       };
     }, 'im-ringcentral.lifecycle');
+
+  return { rotate };
 }
