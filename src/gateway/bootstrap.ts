@@ -94,6 +94,44 @@ export async function bootstrapGateway(
     toolsRegistry = undefined;
   }
 
+  // ── 历史工具（bot 优先、owner 回退；有 tools registry 即注册） ──
+  // 注册器定义在外层作用域：tools 的 inject 回调（下方）在服务出现后触发注册。
+  let unregisterHistoryTool: (() => void) | undefined;
+  let historyRegistered = false;
+  const registerHistoryTool = async (): Promise<void> => {
+    if (historyRegistered || !toolsRegistry) return;
+    historyRegistered = true; // 失败时回置，允许服务就绪后重试
+    try {
+      const tool = await createHistoryTool({ account, ownerClient, botClient });
+      if (tool) {
+        const registry = toolsRegistry as unknown as { register(definition: unknown): () => void };
+        unregisterHistoryTool = registry.register(tool);
+        logger.info('[ringcentral] registered ringcentral_get_recent_messages tool');
+        debugLog(config.debug, '[tools] registered ringcentral_get_recent_messages tool');
+      }
+    } catch (err) {
+      logger.warn('im-ringcentral: history tool registration failed: ' + (err instanceof Error ? err.message : String(err)));
+      historyRegistered = false;
+    }
+  };
+  const historyReady: Promise<void> = registerHistoryTool();
+
+  // inject 跨 isolate 取 host 服务：桌面端 bundle 行 ctx.get 看不到 host 平面，
+  // inject 可以（与 installSettingsSection 注入 settings 同一条路）。
+  try {
+    (ctx as unknown as { inject?(deps: string[], cb: (sctx: Context) => void): void })
+      .inject?.(['tools'], (sctx) => {
+        const injected = (sctx as unknown as Record<string, unknown>).tools as ToolsRegistryLike | undefined;
+        if (injected && !toolsRegistry) {
+          toolsRegistry = injected;
+          debugLog(config.debug, '[tools] inject: tools registry available');
+          void registerHistoryTool();
+        }
+      });
+  } catch (err) {
+    logger.warn('im-ringcentral: tools inject failed: ' + (err instanceof Error ? err.message : String(err)));
+  }
+
   const outboundHandler = createOutboundHandler(manager, sender, config, logger, toolsRegistry);
   (ctx as unknown as { on(event: string, handler: (...args: unknown[]) => void): void })
     .on('session/event', outboundHandler as (...args: unknown[]) => void);
@@ -268,11 +306,12 @@ export async function bootstrapGateway(
 
   // ── userQuestions provider（agent ask_user 的 IM 应答面；web GUI 已注册时跳过） ──
   let disposeUserQuestions: (() => void) | undefined;
-  try {
-    const userQuestions = ctx.get('userQuestions') as
-      | { registerProvider(provider: unknown): () => void }
-      | undefined;
-    if (userQuestions && typeof userQuestions.registerProvider === 'function') {
+  let userQuestionsRegistered = false;
+  const registerUserQuestions = (
+    service: { registerProvider(provider: unknown): () => void } | undefined,
+  ): void => {
+    if (!service || userQuestionsRegistered) return;
+    try {
       userQuestionsProvider = new RingCentralUserQuestionsProvider({
         manager,
         logger,
@@ -280,12 +319,31 @@ export async function bootstrapGateway(
           await sendReply(record.replyTarget, text);
         },
       });
-      disposeUserQuestions = userQuestions.registerProvider(userQuestionsProvider);
+      disposeUserQuestions = service.registerProvider(userQuestionsProvider);
+      userQuestionsRegistered = true;
       logger.info('[ringcentral] registered userQuestions provider');
+      debugLog(config.debug, '[userQuestions] registered IM provider');
+    } catch (err) {
+      // 例如 web profile 的 GUI provider 已注册（DUPLICATE_PROVIDER）：GUI 优先，IM 作答不可用
+      logger.warn('im-ringcentral: userQuestions provider registration skipped: ' + (err instanceof Error ? err.message : String(err)));
     }
+  };
+  try {
+    registerUserQuestions(ctx.get('userQuestions') as
+      | { registerProvider(provider: unknown): () => void }
+      | undefined);
+  } catch {
+    // ctx.get 不可用/抛错时走 inject 路径
+  }
+  try {
+    (ctx as unknown as { inject?(deps: string[], cb: (sctx: Context) => void): void })
+      .inject?.(['userQuestions'], (sctx) => {
+        registerUserQuestions((sctx as unknown as Record<string, unknown>).userQuestions as
+          | { registerProvider(provider: unknown): () => void }
+          | undefined);
+      });
   } catch (err) {
-    // 例如 web profile 的 GUI provider 已注册（DUPLICATE_PROVIDER）：GUI 优先，IM 作答不可用
-    logger.warn('im-ringcentral: userQuestions provider registration skipped: ' + (err instanceof Error ? err.message : String(err)));
+    logger.warn('im-ringcentral: userQuestions inject failed: ' + (err instanceof Error ? err.message : String(err)));
   }
 
   // ── 生命周期 ──
@@ -355,22 +413,7 @@ export async function bootstrapGateway(
         monitors.push(ownerMonitor);
       }
 
-      // ── 历史工具（bot 优先、owner 回退；有 tools registry 即注册） ──
-      let unregisterHistoryTool: (() => void) | undefined;
-      const historyReady: Promise<void> = (async () => {
-        if (toolsRegistry) {
-          try {
-            const tool = await createHistoryTool({ account, ownerClient, botClient });
-            if (tool) {
-              const registry = toolsRegistry as unknown as { register(definition: unknown): () => void };
-              unregisterHistoryTool = registry.register(tool);
-              logger.info('[ringcentral] registered ringcentral_get_recent_messages tool');
-            }
-          } catch (err) {
-            logger.warn('im-ringcentral: history tool registration failed: ' + (err instanceof Error ? err.message : String(err)));
-          }
-        }
-      })();
+      // ── 历史工具注册已移至外层作用域（tools 的 inject 回调需要触达） ──
 
       const starts = monitors.map((monitor) =>
         monitor.start().catch((err) => {

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveSecret, readManagedCredentialsFile } from "../src/ringcentral/credentials.js";
+import { resolveSecret, readManagedCredentialsFile, installCredentialsInjection } from "../src/ringcentral/credentials.js";
 import type { Context } from '@deepseek-ai/cordis';
 import type { Logger } from '../src/types.js';
 
@@ -92,5 +92,31 @@ describe("resolveSecret", () => {
     writeFileSync(path, "not: yaml: at all");
     expect(readManagedCredentialsFile(path)).toEqual({});
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("prefers the injected credentials service once inject fires", async () => {
+    vi.stubEnv("RC_TEST_TOKEN", "from-env");
+    const subCtx = {
+      credentials: { resolve: async () => ({ value: "from-inject", source: "file" }) },
+    };
+    const ctx = {
+      inject: (_deps: string[], cb: (sctx: unknown) => void) => { cb(subCtx); },
+      get: () => undefined,
+    } as unknown as Context;
+    const live = installCredentialsInjection(ctx, logger);
+    await expect(resolveSecret(ctx, "RC_TEST_TOKEN", logger, live)).resolves.toBe("from-inject");
+    vi.unstubAllEnvs();
+  });
+
+  it("keeps env/file fallback when inject never fires", async () => {
+    const ctx = {
+      inject: () => undefined,
+      get: () => undefined,
+    } as unknown as Context;
+    const live = installCredentialsInjection(ctx, logger);
+    vi.stubEnv("RC_TEST_TOKEN", "from-env");
+    await expect(resolveSecret(ctx, "RC_TEST_TOKEN", logger, live)).resolves.toBe("from-env");
+    vi.unstubAllEnvs();
+    await expect(resolveSecret(ctx, "RC_TEST_TOKEN", logger, live)).resolves.toBeUndefined();
   });
 });

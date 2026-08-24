@@ -8,7 +8,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings';
 import { ConfigSchema, type ImRingCentralConfig } from './config.js';
 import { resolveAccount } from './ringcentral/accounts.js';
-import { resolveSecret } from './ringcentral/credentials.js';
+import { resolveSecret, installCredentialsInjection } from './ringcentral/credentials.js';
 import type { ResolvedAccount } from './ringcentral/types.js';
 import { mergeLiveConfig } from './settings-merge.js';
 import { debugLog } from './debug-log.js';
@@ -78,12 +78,15 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
   }
 
   // ── 凭据解析：config 显式值优先，其次宿主 credentials 域 ──
-  // 宿主 credentials 服务的解析链：进程环境 → 托管 $DSH_HOME/.credentials.yaml
-  // → 项目/用户 .env；服务不可用时 resolveSecret 回退进程环境变量。
+  // 宿主 credentials 服务的解析链：环境 → 托管 $DSH_HOME/.credentials.yaml
+  // → 项目/用户 .env；服务不可用时 resolveSecret 回退文件直读。
+  // inject 注入的服务跨 isolate 可见（桌面端 bundle 行 ctx.get 读不到 host 服务），
+  // 服务出现后自动优先；注入前由文件兜底先行，启动不阻塞。
+  const credentialsLive = installCredentialsInjection(ctx, logger);
   const explicitOr = async (configured: string | undefined, envName: string): Promise<string | undefined> => {
     const explicit = configured?.trim();
     if (explicit) return explicit;
-    return resolveSecret(ctx, envName, logger);
+    return resolveSecret(ctx, envName, logger, credentialsLive);
   };
 
   const botToken = await explicitOr(config.botToken, 'RC_BOT_TOKEN');
@@ -98,7 +101,7 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
 
   // server 是运营参数而非密钥：环境变量（credentials 链）优先于 Schema 默认值，
   // 保证 sandbox 等场景的 RC_SERVER_URL 覆盖始终生效。
-  const server = (await resolveSecret(ctx, 'RC_SERVER_URL', logger)) ?? config.server;
+  const server = (await resolveSecret(ctx, 'RC_SERVER_URL', logger, credentialsLive)) ?? config.server;
 
   const [ownerClientId, ownerClientSecret, ownerJwt] = await Promise.all([
     explicitOr(config.ownerCredentials?.clientId, 'RC_USER_CLIENT_ID'),
