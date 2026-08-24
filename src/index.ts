@@ -11,6 +11,7 @@ import { resolveAccount } from './ringcentral/accounts.js';
 import { resolveSecret } from './ringcentral/credentials.js';
 import type { ResolvedAccount } from './ringcentral/types.js';
 import { mergeLiveConfig } from './settings-merge.js';
+import { debugLog } from './debug-log.js';
 import { bootstrapGateway } from './gateway/index.js';
 import type { DshAgentRegistry } from './session/index.js';
 import type { Logger } from './types.js';
@@ -30,6 +31,7 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
   const agents = (ctx as unknown as Record<string, unknown>).agents as DshAgentRegistry;
   const logger: Logger = ((ctx as unknown as Record<string, unknown>).logger as Logger) ?? console;
   console.log('[im-ringcentral] apply start (settings 域挂载前)');
+  debugLog(config.debug, '[boot] apply start');
 
   // ── 可选 settings 域：Web GUI 配置卡的数据源 ──
   // 无 settings 服务（自定义 cordis.yml）时该注册不生效，插件退回纯 cordis config。
@@ -44,6 +46,7 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
       setSource: (source: () => ImRingCentralConfig) => {
         liveResolved = source;
         console.log('[im-ringcentral] settings 域已挂载（namespace=ringcentral），Web GUI 配置卡可用');
+        debugLog(config.debug, '[boot] settings namespace mounted (ringcentral)');
       },
       onChange: () => {
         try {
@@ -53,6 +56,12 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
           if (resolved.debug) {
             logger.debug(
               'im-ringcentral: settings 已合并: access=' + JSON.stringify(resolved.access) +
+              ' requireMention=' + resolved.requireMention +
+              ' groupPrompt=' + (resolved.groupPrompt ?? '') +
+              ' homeChannel=' + resolved.homeChannel,
+            );
+            debugLog(true,
+              '[settings] merged: access=' + JSON.stringify(resolved.access) +
               ' requireMention=' + resolved.requireMention +
               ' groupPrompt=' + (resolved.groupPrompt ?? '') +
               ' homeChannel=' + resolved.homeChannel,
