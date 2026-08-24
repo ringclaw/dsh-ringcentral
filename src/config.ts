@@ -98,11 +98,11 @@ export const ConfigSchema: Schema<ImRingCentralConfig> = Schema.object({
   homeChannel: Schema.string().default('').description('默认 Home chat id'),
   textChunkLimit: Schema.number().default(4000).description('单条消息最大字符数'),
 
-  provider: Schema.string().description('LLM provider name'),
-  model: Schema.string().description('Model name'),
-  preset: Schema.string().description('Agent preset id'),
-  cwd: Schema.string().description('Agent working directory'),
+  provider: Schema.string().default('').description('LLM provider name（留空 = 宿主默认）'),
+  model: Schema.string().default('').description('Model name（留空 = 宿主默认）'),
+  preset: Schema.string().default('').description('Agent preset id（留空 = 不挂载预设）'),
+  cwd: Schema.string().default('').description('Agent working directory（留空 = 进程工作目录）'),
   sessionIdleTimeout: Schema.number().default(30 * 60 * 1000).description('会话闲置超时(ms)'),
-  showToolResults: Schema.boolean().default(false).description('是否展示工具调用成功结果（错误始终展示）'),
+  showToolResults: Schema.boolean().default(false).description('回显成功的工具输出（错误始终回显）'),
   debug: Schema.boolean().default(false).description('调试模式（含入站消息调试日志）'),
 });
