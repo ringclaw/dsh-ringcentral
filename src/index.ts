@@ -42,12 +42,21 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
   // 因此两份对象都必须合并，否则 GUI 保存的 access/提示词/历史配置不生效。
   let liveResolved: () => ImRingCentralConfig = () => config;
   let accountRef: ResolvedAccount | undefined;
+  let settingsReady = false;
+  let settingsSettled: () => void = () => undefined;
+  const settingsSettledPromise = new Promise<void>((resolve) => {
+    settingsSettled = resolve;
+  });
   try {
     installSettingsSection(ctx, RC_SETTINGS_NAMESPACE, ConfigSchema, config, {
       setSource: (source: () => ImRingCentralConfig) => {
         liveResolved = source;
         console.log('[im-ringcentral] settings 域已挂载（namespace=ringcentral），Web GUI 配置卡可用');
         debugLog(true, '[boot] settings namespace mounted (ringcentral)');
+        if (!settingsReady) {
+          settingsReady = true;
+          settingsSettled();
+        }
       },
       onChange: () => {
         try {
@@ -89,7 +98,24 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
     return resolveSecret(ctx, envName, logger, credentialsLive);
   };
 
-  const botToken = await explicitOr(config.botToken, 'RC_BOT_TOKEN');
+  // ── settings 域密钥兜底：GUI 卡片的密钥写入落在 settings user 层
+  // （credentials 域在部分部署不可达）。settings 挂载是异步的：有界等待，
+  // 超时或永不挂载（自建 cordis.yml 无 settings 服务）时返回 undefined。
+  const settingsSecret = async (pick: (cfg: ImRingCentralConfig) => string | undefined): Promise<string | undefined> => {
+    const deadline = Date.now() + 10_000;
+    while (!settingsReady && Date.now() < deadline) {
+      await Promise.race([
+        settingsSettledPromise,
+        new Promise<void>((resolve) => setTimeout(resolve, 500)),
+      ]);
+    }
+    if (!settingsReady) return undefined;
+    const value = pick(liveResolved());
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  };
+
+  const botToken = (await explicitOr(config.botToken, 'RC_BOT_TOKEN')) ??
+    await settingsSecret((cfg) => cfg.botToken);
   debugLog(true, '[boot] botToken ' + (botToken ? 'resolved(len=' + botToken.length + ')' : 'MISSING'));
   if (!botToken) {
     logger.error('RC_BOT_TOKEN 未配置，插件未启动');
@@ -104,9 +130,12 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
   const server = (await resolveSecret(ctx, 'RC_SERVER_URL', logger, credentialsLive)) ?? config.server;
 
   const [ownerClientId, ownerClientSecret, ownerJwt] = await Promise.all([
-    explicitOr(config.ownerCredentials?.clientId, 'RC_USER_CLIENT_ID'),
-    explicitOr(config.ownerCredentials?.clientSecret, 'RC_USER_CLIENT_SECRET'),
-    explicitOr(config.ownerCredentials?.jwt, 'RC_USER_JWT_TOKEN'),
+    (await explicitOr(config.ownerCredentials?.clientId, 'RC_USER_CLIENT_ID')) ??
+      await settingsSecret((cfg) => cfg.ownerCredentials?.clientId),
+    (await explicitOr(config.ownerCredentials?.clientSecret, 'RC_USER_CLIENT_SECRET')) ??
+      await settingsSecret((cfg) => cfg.ownerCredentials?.clientSecret),
+    (await explicitOr(config.ownerCredentials?.jwt, 'RC_USER_JWT_TOKEN')) ??
+      await settingsSecret((cfg) => cfg.ownerCredentials?.jwt),
   ]);
   const ownerCredentials = ownerClientId && ownerClientSecret && ownerJwt
     ? { clientId: ownerClientId, clientSecret: ownerClientSecret, jwt: ownerJwt }
