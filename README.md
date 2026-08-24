@@ -225,6 +225,7 @@ with the entry resolved to an absolute path on the machine (default
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | Plugin not starting | `RC_BOT_TOKEN` missing | Set `RC_BOT_TOKEN` (env or `$DSH_HOME/.credentials.yaml`) or `botToken` in config |
+| Debug log shows `[cred] … service=absent` | In desktop-style deployments, bundle-row plugins cannot read host services via `ctx.get` (isolate scoping) | Not an error: 0.3.15+ ships a file fallback and 0.3.17 an inject-based path — see [docs/credentials-service-unreachable.md](docs/credentials-service-unreachable.md) |
 | Bot never replies in a group chat | `access.groupMode: disabled`, not allowlisted, or no mention | Check `access.groupMode` / `access.groupAllow` and `@`-mention the bot |
 | DM ignored | `access.dmMode: disabled` or sender not in `access.dmAllow` | Check `access.dmMode` / `access.dmAllow` |
 | History tool returns nothing | Chat not visible to bot or owner | Reads try the bot first, then the owner; pass a bare chat id or `channel:<chatId>` and make sure one client is a member |

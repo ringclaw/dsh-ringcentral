@@ -206,6 +206,7 @@ TypeScript 入口）。
 | 现象 | 可能原因 | 修复 |
 | --- | --- | --- |
 | 插件未启动 | 缺少 `RC_BOT_TOKEN` | 设置 `RC_BOT_TOKEN`（环境变量或 `$DSH_HOME/.credentials.yaml`）或在 config 配置 `botToken` |
+| debug 日志出现 `[cred] … service=absent` | 桌面端等部署中 bundle 行插件 `ctx.get` 读不到 host 服务（isolate 作用域） | 非错误：0.3.15+ 已用文件兜底 + inject 修复，详见 [docs/credentials-service-unreachable.md](docs/credentials-service-unreachable.md) |
 | 群聊中 bot 不回复 | `access.groupMode: disabled`、未在白名单或未 @ | 检查 `access.groupMode` / `access.groupAllow` 并 @bot |
 | 私聊被忽略 | `access.dmMode: disabled` 或发送者不在 `access.dmAllow` | 检查 `access.dmMode` / `access.dmAllow` |
 | 历史工具返回空 | 目标聊天对 bot 与 owner 均不可见 | 读取链 bot 优先、owner 回退；传裸 chat id 或 `channel:<chatId>`，并确认至少一个客户端是该聊天成员 |
