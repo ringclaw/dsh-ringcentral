@@ -25,6 +25,7 @@ import { sendMessage, updateMessage, deleteMessage } from '../ringcentral/send.j
 import { resolveInboundAttachmentsForAgent } from '../ringcentral/attachments.js';
 import { ThreadParticipationTracker } from '../ringcentral/threading.js';
 import { chunkText, markdownToMiniMarkdown } from '../ringcentral/markdown.js';
+import { debugLog } from '../debug-log.js';
 import { PROCESSING_PLACEHOLDER_DELAYED_TEXT, PROCESSING_PLACEHOLDER_INITIAL_TEXT } from '../ringcentral/shared.js';
 
 /** 每 peer 待处理队列上限的清理水位（超过时丢弃最旧任务） */
@@ -116,6 +117,7 @@ export async function bootstrapGateway(
 
   const log = (message: string): void => {
     logger.info(message);
+    debugLog(config.debug, message);
   };
 
   const getPersonInfo = async (personId: string) => {
@@ -166,6 +168,7 @@ export async function bootstrapGateway(
     if (!decision.admitted) {
       if (config.debug) {
         logger.debug('im-ringcentral: inbound dropped: chatId=' + post.groupId + ' reason=' + decision.reason);
+        debugLog(true, '[inbound] dropped: chatId=' + post.groupId + ' sender=' + post.creatorId + ' reason=' + decision.reason);
       }
       return;
     }
@@ -176,6 +179,7 @@ export async function bootstrapGateway(
         ' sender=' + post.creatorId + ' scope=' + decision.scope +
         ' text=' + (post.text ?? '').slice(0, 120),
       );
+      debugLog(true, '[inbound] admitted: chatId=' + post.groupId + ' sender=' + post.creatorId + ' scope=' + decision.scope);
     }
 
     const replyTarget: ReplyTarget = {
