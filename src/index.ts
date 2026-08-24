@@ -28,6 +28,7 @@ export type { ImRingCentralConfig } from './config.js';
 export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<void> {
   const agents = (ctx as unknown as Record<string, unknown>).agents as DshAgentRegistry;
   const logger: Logger = ((ctx as unknown as Record<string, unknown>).logger as Logger) ?? console;
+  console.log('[im-ringcentral] apply start (settings 域挂载前)');
 
   // ── 可选 settings 域：Web GUI 配置卡的数据源 ──
   // 无 settings 服务（自定义 cordis.yml）时该注册不生效，插件退回纯 cordis config。
@@ -38,6 +39,7 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
     installSettingsSection(ctx, RC_SETTINGS_NAMESPACE, ConfigSchema, config, {
       setSource: (source: () => ImRingCentralConfig) => {
         liveResolved = source;
+        console.log('[im-ringcentral] settings 域已挂载（namespace=ringcentral），Web GUI 配置卡可用');
       },
       onChange: () => {
         try {
