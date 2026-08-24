@@ -131,5 +131,11 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
     return;
   }
 
-  await bootstrapGateway(ctx, agents, account, config, logger);
+  try {
+    await bootstrapGateway(ctx, agents, account, config, logger);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('im-ringcentral: gateway bootstrap failed: ' + message);
+    debugLog(true, '[boot] gateway bootstrap FAILED: ' + message);
+  }
 }
