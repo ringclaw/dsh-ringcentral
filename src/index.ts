@@ -5,9 +5,11 @@
  * 网关组装（准入判定 + 入站 + 出站 + 生命周期）见 src/gateway/。
  */
 import type { Context } from '@deepseek-ai/cordis';
+import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings';
 import { ConfigSchema, type ImRingCentralConfig } from './config.js';
 import { resolveAccount } from './ringcentral/accounts.js';
 import { resolveSecret } from './ringcentral/credentials.js';
+import { mergeLiveConfig } from './settings-merge.js';
 import { bootstrapGateway } from './gateway/index.js';
 import type { DshAgentRegistry } from './session/index.js';
 import type { Logger } from './types.js';
@@ -17,12 +19,37 @@ export const name = 'im-ringcentral';
 export const inject = ['agents'];
 export const Config = ConfigSchema;
 
+/** settings 域 namespace：Web GUI「设置 → 插件 → 插件配置」卡片的 key */
+export const RC_SETTINGS_NAMESPACE = settingsNamespace('ringcentral');
+
 export type { ImRingCentralConfig } from './config.js';
 
 // ── 插件主体 ──
 export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<void> {
   const agents = (ctx as unknown as Record<string, unknown>).agents as DshAgentRegistry;
   const logger: Logger = ((ctx as unknown as Record<string, unknown>).logger as Logger) ?? console;
+
+  // ── 可选 settings 域：Web GUI 配置卡的数据源 ──
+  // 无 settings 服务（自定义 cordis.yml）时该注册不生效，插件退回纯 cordis config。
+  // onChange 在 settings/updated 时触发：把解析值合并进 config 对象，
+  // 下一条 IM 消息按新配置生效（密钥字段豁免，见 settings-merge.ts）。
+  let liveResolved: () => ImRingCentralConfig = () => config;
+  try {
+    installSettingsSection(ctx, RC_SETTINGS_NAMESPACE, ConfigSchema, config, {
+      setSource: (source: () => ImRingCentralConfig) => {
+        liveResolved = source;
+      },
+      onChange: () => {
+        try {
+          mergeLiveConfig(config, liveResolved());
+        } catch (err) {
+          logger.warn('im-ringcentral: settings 变更合并失败: ' + (err instanceof Error ? err.message : String(err)));
+        }
+      },
+    });
+  } catch (err) {
+    logger.warn('im-ringcentral: settings 域挂载失败，仅使用 cordis config: ' + (err instanceof Error ? err.message : String(err)));
+  }
 
   // ── 凭据解析：config 显式值优先，其次宿主 credentials 域 ──
   // 宿主 credentials 服务的解析链：进程环境 → 托管 $DSH_HOME/.credentials.yaml

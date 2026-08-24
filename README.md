@@ -124,6 +124,27 @@ The access-control block mirrors `@tencent-connect/dsh-qqbot` exactly
 | `showToolResults` | boolean | `false` | Show successful tool results (errors always show) |
 | `debug` | boolean | `false` | Debug logging (includes inbound message logs) |
 
+Every row except the secret entries is editable from the Web GUI card
+described below.
+
+## Web GUI configuration
+
+Installed into a web profile (`dsh plugin --profile web add dsh-ringcentral`),
+the plugin registers a settings namespace and a configuration card under
+**Settings → Plugins → Plugin configuration**. The card:
+
+- edits every non-secret entry of the table above; saves apply to the **next
+  inbound IM message** (no restart), and a per-field **Reset** returns a value
+  to the composed profile layer;
+- renders the four secrets (`RC_BOT_TOKEN`, `RC_USER_*`) as **write-only**
+  controls: it reports only whether each is configured and writes through the
+  host credentials domain (`$DSH_HOME/.credentials.yaml`); secret values are
+  never sent back to the page. Rotated credentials still take effect after a
+  plugin restart (see Design principles).
+
+Without a settings service (a bare custom `cordis.yml`), the card simply does
+not mount and the plugin behaves exactly as before.
+
 ## Commands
 
 | Command | Description |
