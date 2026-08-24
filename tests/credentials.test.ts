@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveSecret, readManagedCredentialsFile, installCredentialsInjection } from "../src/ringcentral/credentials.js";
+import { resolveSecret, readManagedCredentialsFile, installCredentialsInjection, watchManagedCredentialsFile } from "../src/ringcentral/credentials.js";
 import type { Context } from '@deepseek-ai/cordis';
 import type { Logger } from '../src/types.js';
 
@@ -118,5 +118,33 @@ describe("resolveSecret", () => {
     await expect(resolveSecret(ctx, "RC_TEST_TOKEN", logger, live)).resolves.toBe("from-env");
     vi.unstubAllEnvs();
     await expect(resolveSecret(ctx, "RC_TEST_TOKEN", logger, live)).resolves.toBeUndefined();
+  });
+
+  it("watchManagedCredentialsFile fires on mtime change and stops after dispose", async () => {
+    const dir = join(tmpdir(), "rc-watch-test-" + Date.now());
+    mkdirSync(dir, { recursive: true });
+    vi.stubEnv("DSH_HOME", dir);
+    const file = join(dir, ".credentials.yaml");
+    writeFileSync(file, "version: 1\nrefs:\n  X: a\n");
+
+    let calls = 0;
+    const dispose = watchManagedCredentialsFile(() => {
+      calls++;
+    }, 50);
+
+    // 等待 watcher 建立后改写文件
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    writeFileSync(file, "version: 1\nrefs:\n  X: b\n");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(calls).toBeGreaterThan(0);
+
+    const afterFirst = calls;
+    dispose();
+    writeFileSync(file, "version: 1\nrefs:\n  X: c\n");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(calls).toBe(afterFirst);
+
+    vi.unstubAllEnvs();
+    rmSync(dir, { recursive: true, force: true });
   });
 });

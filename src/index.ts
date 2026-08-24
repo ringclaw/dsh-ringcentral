@@ -9,6 +9,7 @@ import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-sett
 import { ConfigSchema, type ImRingCentralConfig } from './config.js';
 import { resolveAccount } from './ringcentral/accounts.js';
 import { resolveSecret, installCredentialsInjection, watchManagedCredentialsFile } from './ringcentral/credentials.js';
+import { createRotationScheduler } from './rotation-scheduler.js';
 import type { ResolvedAccount } from './ringcentral/types.js';
 import { mergeLiveConfig } from './settings-merge.js';
 import { debugLog } from './debug-log.js';
@@ -201,37 +202,33 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
     };
   };
 
-  let rotationTimer: ReturnType<typeof setTimeout> | undefined;
-  let rotationInFlight: Promise<boolean> | undefined;
-  const runRotation = async (source: string): Promise<boolean> => {
-    if (rotationInFlight) return rotationInFlight;
-    rotationInFlight = (async (): Promise<boolean> => {
-      try {
-        const secrets = await resolveRotationSecrets();
-        if (!secrets.botToken) {
-          debugLog(true, '[rotate] source=' + source + ' — no token resolved, skipping');
-          return false;
-        }
-        return await rotation.rotate(secrets);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.warn('im-ringcentral: rotation failed: ' + message);
-        debugLog(true, '[rotate] FAILED: ' + message);
+  // debounce 合并 + 单飞（行为契约见 rotation-scheduler.ts；测试覆盖在
+  // tests/rotation-scheduler.test.ts）
+  const scheduler = createRotationScheduler(async (source) => {
+    try {
+      const secrets = await resolveRotationSecrets();
+      if (!secrets.botToken) {
+        debugLog(true, '[rotate] source=' + source + ' — no token resolved, skipping');
         return false;
-      } finally {
-        rotationInFlight = undefined;
       }
-    })();
-    return rotationInFlight;
-  };
+      return await rotation.rotate(secrets);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn('im-ringcentral: rotation failed: ' + message);
+      debugLog(true, '[rotate] FAILED: ' + message);
+      return false;
+    }
+  });
   const scheduleRotation = (source: string): void => {
     debugLog(config.debug, '[rotate] scheduled (source=' + source + ')');
-    if (rotationTimer) clearTimeout(rotationTimer);
-    rotationTimer = setTimeout(() => {
-      rotationTimer = undefined;
-      void runRotation(source);
-    }, 1000);
+    scheduler.schedule(source);
   };
+  try {
+    (ctx as unknown as { effect(fn: () => (() => void) | void, name?: string): void })
+      .effect(() => () => scheduler.dispose(), 'im-ringcentral.rotation-scheduler');
+  } catch {
+    // effect 不可用时定时器随进程终止，无泄漏风险
+  }
 
   // settings 变更（含 GUI 密钥保存）：已有 onChange 内追加调度
   // credentials/updated 事件：替换为调度（见上方监听器）

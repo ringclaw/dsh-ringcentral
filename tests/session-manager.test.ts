@@ -142,4 +142,33 @@ describe("SessionManager", () => {
 
     await manager.disposeAll();
   });
+
+  it("setAccountKey re-derives session ids for the same peer", async () => {
+    const registry = makeRegistry();
+    const manager = new SessionManager(makeCtx(), registry, makeConfig(), "acct-a", noLog);
+
+    await manager.getOrCreate("direct", "user-1", "user-1", { scope: "direct", chatId: "c1" });
+    const before = registry.created[0];
+    expect(before).toBeDefined();
+
+    // 换 bot 场景：account key 切换 → 同一 peer 派生新会话命名空间
+    manager.setAccountKey("acct-b");
+    await manager.getOrCreate("direct", "user-1", "user-1", { scope: "direct", chatId: "c1" });
+    expect(registry.created).toHaveLength(2);
+    expect(registry.created[1]).not.toBe(before);
+
+    await manager.disposeAll();
+  });
+
+  it("setAccountKey with the same value is a no-op", async () => {
+    const registry = makeRegistry();
+    const manager = new SessionManager(makeCtx(), registry, makeConfig(), "acct-a", noLog);
+
+    await manager.getOrCreate("direct", "user-1", "user-1", { scope: "direct", chatId: "c1" });
+    manager.setAccountKey("acct-a");
+    await manager.getOrCreate("direct", "user-1", "user-1", { scope: "direct", chatId: "c1" });
+    expect(registry.created).toHaveLength(1);
+
+    await manager.disposeAll();
+  });
 });
