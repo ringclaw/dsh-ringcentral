@@ -303,12 +303,21 @@ export async function bootstrapGateway(
         abortSignal: controller.signal,
         onConnected: () => {
           logger.info('[ringcentral] bot websocket connected');
+          debugLog(config.debug, '[ws] bot connected');
         },
         onDisconnected: (err) => {
           logger.warn('[ringcentral] bot websocket disconnected: ' + (err?.message ?? 'unknown'));
+          debugLog(config.debug, '[ws] bot disconnected: ' + (err?.message ?? 'unknown'));
+        },
+        onDiagnostic: (event, details) => {
+          debugLog(config.debug, '[ws] ' + event + (details ? ' ' + JSON.stringify(details) : ''));
         },
         onMessage,
-        log: (...args) => logger.info(args.map(String).join(' ')),
+        log: (...args) => {
+          const message = args.map(String).join(' ');
+          logger.info(message);
+          debugLog(config.debug, message);
+        },
       });
       monitors.push(botMonitor);
 
@@ -322,12 +331,21 @@ export async function bootstrapGateway(
           abortSignal: controller.signal,
           onConnected: () => {
             logger.info('[ringcentral] owner websocket connected');
+            debugLog(config.debug, '[ws] owner connected');
           },
           onDisconnected: (err) => {
             logger.debug('[ringcentral] owner websocket disconnected: ' + (err?.message ?? 'unknown'));
+            debugLog(config.debug, '[ws] owner disconnected: ' + (err?.message ?? 'unknown'));
+          },
+          onDiagnostic: (event, details) => {
+            debugLog(config.debug, '[ws] owner ' + event + (details ? ' ' + JSON.stringify(details) : ''));
           },
           onMessage,
-          log: (...args) => logger.debug(args.map(String).join(' ')),
+          log: (...args) => {
+            const message = args.map(String).join(' ');
+            logger.debug(message);
+            debugLog(config.debug, message);
+          },
         });
         monitors.push(ownerMonitor);
       }
