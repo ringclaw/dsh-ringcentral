@@ -9,6 +9,7 @@ import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-sett
 import { ConfigSchema, type ImRingCentralConfig } from './config.js';
 import { resolveAccount } from './ringcentral/accounts.js';
 import { resolveSecret } from './ringcentral/credentials.js';
+import type { ResolvedAccount } from './ringcentral/types.js';
 import { mergeLiveConfig } from './settings-merge.js';
 import { bootstrapGateway } from './gateway/index.js';
 import type { DshAgentRegistry } from './session/index.js';
@@ -34,7 +35,10 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
   // 无 settings 服务（自定义 cordis.yml）时该注册不生效，插件退回纯 cordis config。
   // onChange 在 settings/updated 时触发：把解析值合并进 config 对象，
   // 下一条 IM 消息按新配置生效（密钥字段豁免，见 settings-merge.ts）。
+  // 注意：入站判定/历史工具读取 account.config（resolveAccount 启动时的副本），
+  // 因此两份对象都必须合并，否则 GUI 保存的 access/提示词/历史配置不生效。
   let liveResolved: () => ImRingCentralConfig = () => config;
+  let accountRef: ResolvedAccount | undefined;
   try {
     installSettingsSection(ctx, RC_SETTINGS_NAMESPACE, ConfigSchema, config, {
       setSource: (source: () => ImRingCentralConfig) => {
@@ -43,7 +47,17 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
       },
       onChange: () => {
         try {
-          mergeLiveConfig(config, liveResolved());
+          const resolved = liveResolved();
+          mergeLiveConfig(config, resolved);
+          if (accountRef) mergeLiveConfig(accountRef.config, resolved);
+          if (resolved.debug) {
+            logger.debug(
+              'im-ringcentral: settings 已合并: access=' + JSON.stringify(resolved.access) +
+              ' requireMention=' + resolved.requireMention +
+              ' groupPrompt=' + (resolved.groupPrompt ?? '') +
+              ' homeChannel=' + resolved.homeChannel,
+            );
+          }
         } catch (err) {
           logger.warn('im-ringcentral: settings 变更合并失败: ' + (err instanceof Error ? err.message : String(err)));
         }
@@ -93,7 +107,7 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
   });
 
   // ── 解析有效账号（密钥已通过 credentials 域解析） ──
-  let account;
+  let account: ResolvedAccount;
   try {
     account = resolveAccount({
       ...config,
@@ -101,6 +115,7 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
       server,
       ownerCredentials: ownerCredentials ?? config.ownerCredentials,
     });
+    accountRef = account;
   } catch (err) {
     logger.error('im-ringcentral: ' + (err instanceof Error ? err.message : String(err)));
     return;
