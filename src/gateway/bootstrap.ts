@@ -170,6 +170,14 @@ export async function bootstrapGateway(
       return;
     }
 
+    if (config.debug) {
+      logger.debug(
+        'im-ringcentral: inbound admitted: chatId=' + post.groupId +
+        ' sender=' + post.creatorId + ' scope=' + decision.scope +
+        ' text=' + (post.text ?? '').slice(0, 120),
+      );
+    }
+
     const replyTarget: ReplyTarget = {
       scope: decision.scope,
       chatId: decision.chatId,
