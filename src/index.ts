@@ -87,10 +87,12 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
   };
 
   const botToken = await explicitOr(config.botToken, 'RC_BOT_TOKEN');
+  debugLog(true, '[boot] botToken ' + (botToken ? 'resolved(len=' + botToken.length + ')' : 'MISSING'));
   if (!botToken) {
     logger.error('RC_BOT_TOKEN 未配置，插件未启动');
     logger.error('请设置环境变量 RC_BOT_TOKEN（RingCentral Bot 静态 JWT），');
     logger.error('或写入 $DSH_HOME/.credentials.yaml 的 RC_BOT_TOKEN 条目。');
+    debugLog(true, '[boot] RC_BOT_TOKEN missing, plugin NOT started');
     return;
   }
 
