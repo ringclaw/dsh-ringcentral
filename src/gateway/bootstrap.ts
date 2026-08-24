@@ -38,6 +38,7 @@ export async function bootstrapGateway(
   config: ImRingCentralConfig,
   logger: Logger,
 ): Promise<void> {
+  debugLog(config.debug, '[gateway] bootstrap start');
   const botClient = createBotClient(account.server, account.botToken);
   const ownerClient = account.ownerCredentials
     ? createOwnerClient(account.server, account.ownerCredentials.clientId, account.ownerCredentials.clientSecret, account.ownerCredentials.jwt)
@@ -48,8 +49,10 @@ export async function bootstrapGateway(
   let botPersonId: string | undefined;
   try {
     botPersonId = String((await botClient.getExtensionInfo()).id);
+    debugLog(config.debug, '[gateway] botPersonId resolved: ' + botPersonId);
   } catch {
     logger.warn('im-ringcentral: unable to resolve bot extension id; self-echo filtering degraded');
+    debugLog(config.debug, '[gateway] botPersonId resolution failed (self-echo filtering degraded)');
   }
 
   const tracker = new ThreadParticipationTracker();
@@ -286,8 +289,10 @@ export async function bootstrapGateway(
   }
 
   // ── 生命周期 ──
+  debugLog(config.debug, '[gateway] core ready, registering lifecycle effect');
   (ctx as unknown as { effect(fn: () => (() => Promise<void>) | void, name?: string): void })
     .effect(() => {
+      debugLog(config.debug, '[gateway] lifecycle effect running');
       const controller = new AbortController();
       const ignoredTexts = [
         PROCESSING_PLACEHOLDER_INITIAL_TEXT,
@@ -370,8 +375,10 @@ export async function bootstrapGateway(
       const starts = monitors.map((monitor) =>
         monitor.start().catch((err) => {
           logger.error('im-ringcentral: monitor start failed: ' + (err instanceof Error ? err.message : String(err)));
+          debugLog(config.debug, '[ws] monitor start failed: ' + (err instanceof Error ? err.message : String(err)));
         }),
       );
+      debugLog(config.debug, '[gateway] monitor.start() invoked for ' + starts.length + ' monitor(s)');
 
       return async () => {
         logger.info('Shutting down im-ringcentral');
