@@ -53,7 +53,10 @@ export function readManagedCredentialsFile(
     if (!inRefs) continue;
     if (/^\S/.test(line)) break; // refs 段结束
     const match = /^ {2}([A-Za-z_][A-Za-z0-9_]*):\s*(.*?)\s*$/.exec(line);
-    if (match) refs[match[1]] = match[2];
+    if (match) {
+      const key = match[1];
+      if (typeof key === 'string') refs[key] = match[2] ?? '';
+    }
   }
   return refs;
 }
