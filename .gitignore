@@ -6,3 +6,4 @@ dist/
 .ringcentral/
 coverage/
 cordis.local.yml
+.smoke-dsh/

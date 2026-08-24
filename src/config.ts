@@ -70,11 +70,11 @@ export interface ImRingCentralConfig {
 }
 
 export const ConfigSchema: Schema<ImRingCentralConfig> = Schema.object({
-  botToken: Schema.string().default('').description('RingCentral Bot 静态 JWT（或 RC_BOT_TOKEN 环境变量）'),
+  botToken: Schema.string().role('secret').default('').description('RingCentral Bot 静态 JWT（或 RC_BOT_TOKEN 环境变量）'),
   ownerCredentials: Schema.object({
-    clientId: Schema.string().default('').description('Owner JWT app client id'),
-    clientSecret: Schema.string().default('').description('Owner JWT app client secret'),
-    jwt: Schema.string().default('').description('Owner JWT token'),
+    clientId: Schema.string().role('secret').default('').description('Owner JWT app client id'),
+    clientSecret: Schema.string().role('secret').default('').description('Owner JWT app client secret'),
+    jwt: Schema.string().role('secret').default('').description('Owner JWT token'),
   }).default({ clientId: '', clientSecret: '', jwt: '' }).description('Owner JWT 凭据'),
   server: Schema.string().default('https://platform.ringcentral.com').description('RingCentral API 服务器'),
   access: Schema.object({

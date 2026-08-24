@@ -113,6 +113,22 @@ Group）统一归入 `group` 表面管理。
 | `showToolResults` | boolean | `false` | 展示工具调用成功结果（错误始终展示） |
 | `debug` | boolean | `false` | 调试模式（含入站消息调试日志） |
 
+除密钥条目外，上表全部配置均可通过下方介绍的 Web GUI 卡片编辑。
+
+## Web GUI 配置
+
+安装到 web profile（`dsh plugin --profile web add dsh-ringcentral`）后，插件
+会注册 settings namespace，并在 **设置 → 插件 → 插件配置** 提供配置卡片：
+
+- 上表全部非密钥配置可直接编辑；保存后**下一条 IM 消息即生效**（无需重启），
+  每个字段可单独 Reset 回组合层默认值；
+- 四个密钥（`RC_BOT_TOKEN`、`RC_USER_*`）以**只写**控件呈现：卡片只显示
+  是否已配置，写入走宿主 credentials 域（`$DSH_HOME/.credentials.yaml`），
+  密钥值永不回传页面。更换密钥后仍需重启插件生效（见设计原则）。
+
+未挂载 settings 服务（自建精简 cordis.yml）时卡片不出现，插件行为与之前
+完全一致。
+
 ## 内置命令
 
 | 命令 | 说明 |
