@@ -222,6 +222,31 @@ npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 with the entry resolved to an absolute path on the machine (default
 `dist/index.js`; pass `src/index.ts` to point at the TypeScript entry).
 
+## Test coverage map
+
+`pnpm test` runs 143 cases across 17 files. No network is touched — clients,
+websockets, and harness services are stubbed.
+
+| File | Covers |
+| --- | --- |
+| `tests/accounts.test.ts` | Secret resolution precedence, schema-default fallbacks, legacy `__FROM_ENV__` compat, numeric clamping |
+| `tests/account-scope-key.test.ts` | Stable-identity account key: rotation keeps session keys; token-fingerprint fallback |
+| `tests/credentials.test.ts` | `resolveSecret` chain (service → env → managed file), inject handle, file parser, file watcher |
+| `tests/settings-merge.test.ts` | Live config merge into runtime/account copies, secret-field exemption, server/placeholder branches |
+| `tests/settings-redact.test.ts` | `role('secret')` wire redaction and its sidecar |
+| `tests/monitor.test.ts` | WS frame extraction, post filtering (own echoes, answer markers), websocket URL building |
+| `tests/rotation-scheduler.test.ts` | Debounce coalescing, single-flight, dispose (extracted module, fake timers) |
+| `tests/gateway-rotation.test.ts` | **Fake-harness integration**: `rotate()` rebuilds clients, re-registers the history tool, reconnects the websocket; no-op on same token; fail-safe on missing token |
+| `tests/session-manager.test.ts` | Deterministic session ids, per-scope isolation, `setAccountKey` re-derivation |
+| `tests/inbound.test.ts` | Admission (dm/group allowlists), mention gating, prompt injection, command routing |
+| `tests/outbound.test.ts` | Reply chunking, `showToolResults` gating, placeholder lifecycle |
+| `tests/history-tool.test.ts` | Reader precedence (bot → owner), record clamping, target resolution |
+| `tests/threading.test.ts` | Thread-participation tracking and follow-up classification |
+| `tests/targets.test.ts` | Reply-target resolution and thread anchoring |
+| `tests/markdown.test.ts` | Mini-Markdown conversion |
+| `tests/user-questions.test.ts` | IM answer surface for agent questions |
+| `tests/debug-log.test.ts` | On-disk debug log format and gating |
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |

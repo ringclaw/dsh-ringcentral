@@ -203,6 +203,31 @@ npx @deepseek-ai/dsh web --patch ./cordis.local.yml
 入口解析为本机绝对路径（默认 `dist/index.js`；传 `src/index.ts` 指向
 TypeScript 入口）。
 
+## 测试覆盖地图
+
+`pnpm test` 共 143 个用例 / 17 个文件，全部不触网（客户端、websocket 与
+harness 服务均为 stub）。
+
+| 文件 | 覆盖 |
+| --- | --- |
+| `tests/accounts.test.ts` | 密钥解析优先级、Schema 默认值回退、旧 `__FROM_ENV__` 兼容、数值钳制 |
+| `tests/account-scope-key.test.ts` | 稳定身份 account key：轮换保持会话 key；token 指纹回退 |
+| `tests/credentials.test.ts` | `resolveSecret` 解析链（服务 → 环境 → 托管文件）、inject 句柄、文件解析器、文件 watcher |
+| `tests/settings-merge.test.ts` | 运行时/账号副本的配置合并、密钥字段豁免、server/占位消息分支 |
+| `tests/settings-redact.test.ts` | `role('secret')` wire redaction 与 sidecar |
+| `tests/monitor.test.ts` | WS 帧提取、post 过滤（自身回声/应答标记）、websocket URL 构造 |
+| `tests/rotation-scheduler.test.ts` | debounce 合并、单飞、dispose（抽取模块，fake timers） |
+| `tests/gateway-rotation.test.ts` | **fake-harness 集成**：`rotate()` 重建客户端、重注册历史工具、重连 websocket；同 token no-op；缺 token 失败安全 |
+| `tests/session-manager.test.ts` | 确定性会话 id、按 scope 隔离、`setAccountKey` 重派生 |
+| `tests/inbound.test.ts` | 准入（私聊/群聊白名单）、mention 门控、提示词注入、命令路由 |
+| `tests/outbound.test.ts` | 回复切分、`showToolResults` 门控、占位消息生命周期 |
+| `tests/history-tool.test.ts` | 读取优先级（bot → owner）、条数钳制、目标解析 |
+| `tests/threading.test.ts` | 线程参与跟踪与续聊判定 |
+| `tests/targets.test.ts` | 回复目标解析与线程锚定 |
+| `tests/markdown.test.ts` | Mini-Markdown 转换 |
+| `tests/user-questions.test.ts` | agent 提问的 IM 应答面 |
+| `tests/debug-log.test.ts` | 落盘 debug 日志格式与开关 |
+
 ## 故障排查
 
 | 现象 | 可能原因 | 修复 |
