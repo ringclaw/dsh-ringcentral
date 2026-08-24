@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { resolveSecret } from "../src/ringcentral/credentials.js";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { resolveSecret, readManagedCredentialsFile } from "../src/ringcentral/credentials.js";
 import type { Context } from '@deepseek-ai/cordis';
 import type { Logger } from '../src/types.js';
 
@@ -62,5 +65,32 @@ describe("resolveSecret", () => {
     await expect(resolveSecret(ctx, "RC_TEST_TOKEN", logger)).resolves.toBe("padded");
     vi.unstubAllEnvs();
     await expect(resolveSecret(ctx, "RC_TEST_TOKEN", logger)).resolves.toBeUndefined();
+  });
+
+  it("falls back to the managed credentials file when service and env are absent", async () => {
+    vi.unstubAllEnvs();
+    const ctx = fakeCtx(undefined);
+    const dir = join(tmpdir(), "rc-creds-test-" + Date.now());
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, ".credentials.yaml");
+    writeFileSync(path, "version: 1\nrefs:\n  RC_TEST_TOKEN: file-token\n  OTHER_KEY: x\n");
+    const refs = readManagedCredentialsFile(path);
+    expect(refs).toEqual({ RC_TEST_TOKEN: "file-token", OTHER_KEY: "x" });
+    vi.stubEnv("DSH_HOME", dir);
+    await expect(resolveSecret(ctx, "RC_TEST_TOKEN", logger)).resolves.toBe("file-token");
+    vi.unstubAllEnvs();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("returns empty refs for missing or malformed managed files", () => {
+    const dir = join(tmpdir(), "rc-creds-test-" + Date.now() + "-b");
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, ".credentials.yaml");
+    expect(readManagedCredentialsFile(join(dir, "nope.yaml"))).toEqual({});
+    writeFileSync(path, "refs:\n  BROKEN LINE WITHOUT COLON\n");
+    expect(readManagedCredentialsFile(path)).toEqual({});
+    writeFileSync(path, "not: yaml: at all");
+    expect(readManagedCredentialsFile(path)).toEqual({});
+    rmSync(dir, { recursive: true, force: true });
   });
 });
