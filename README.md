@@ -234,6 +234,7 @@ websockets, and harness services are stubbed.
 | `tests/credentials.test.ts` | `resolveSecret` chain (service → env → managed file), inject handle, file parser, file watcher |
 | `tests/settings-merge.test.ts` | Live config merge into runtime/account copies, secret-field exemption, server/placeholder branches |
 | `tests/settings-redact.test.ts` | `role('secret')` wire redaction and its sidecar |
+| `tests/settings-section.test.ts` | Cross-version settings mounting: `installSection` (harness ≥ 0.1.2) vs legacy `installSettingsSection` fallback (≤ 0.1.1-rc.2), failure containment |
 | `tests/monitor.test.ts` | WS frame extraction, post filtering (own echoes, answer markers), websocket URL building |
 | `tests/rotation-scheduler.test.ts` | Debounce coalescing, single-flight, dispose (extracted module, fake timers) |
 | `tests/gateway-rotation.test.ts` | **Fake-harness integration**: `rotate()` rebuilds clients, re-registers the history tool, reconnects the websocket; no-op on same token; fail-safe on missing token |
@@ -257,6 +258,12 @@ websockets, and harness services are stubbed.
 | DM ignored | `access.dmMode: disabled` or sender not in `access.dmAllow` | Check `access.dmMode` / `access.dmAllow` |
 | History tool returns nothing | Chat not visible to bot or owner | Reads try the bot first, then the owner; pass a bare chat id or `channel:<chatId>` and make sure one client is a member |
 | Agent question not answered from RingCentral | Web GUI provider registered (web profile) | Questions go to the web UI; use a dedicated profile or answer in the web UI |
+| Plugin config card missing from the Web GUI, or save/reset fails, after a harness upgrade | Harness ≥ 0.1.2 moved settings registration to `settings.installSection()` and removed `connection.api`; ≤ 0.4.1 used the removed APIs | Upgrade to `dsh-ringcentral` ≥ 0.4.2 (dual-path: `installSection` on ≥ 0.1.2, legacy fallback on ≤ 0.1.1-rc.2) |
+
+## Harness compatibility
+
+- `dsh-ringcentral` ≥ 0.4.2 supports both harness lines: **≥ 0.1.2-alpha** (settings via `settings.installSection`, writes via `settingsScope.mutate`) and **0.1.1-rc.2 and earlier** (legacy `installSettingsSection` + `connection.api.settings.mutate` fallback).
+- `dsh-ringcentral` ≤ 0.4.1 requires the ≤ 0.1.1-rc.2 settings API; it does not start on harness ≥ 0.1.2.
 
 ## License
 
