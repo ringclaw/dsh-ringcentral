@@ -69,8 +69,20 @@ export function mountSettingsSection<T>(options: SettingsSectionMount<T>): Promi
   const { ctx, ns, schema, entry, hooks, settingsService, loadLegacy, logger } = options;
   const service = settingsService as Partial<SettingsSectionInstaller> | undefined;
   if (service !== undefined && typeof service.installSection === 'function') {
-    service.installSection(ctx, ns, schema, entry, hooks);
-    return Promise.resolve('new');
+    // provider 的 installSection 可能同步抛出（schema/namespace 被拒）：
+    // 兜底为 none 并告警，保证本函数永不同步抛出，调用方无需 try/catch。
+    let result: SettingsSectionMountResult;
+    try {
+      service.installSection(ctx, ns, schema, entry, hooks);
+      result = 'new';
+    } catch (err: unknown) {
+      logger?.warn(
+        'im-ringcentral: settings 域挂载失败，仅使用 cordis config: ' +
+          (err instanceof Error ? err.message : String(err)),
+      );
+      result = 'none';
+    }
+    return Promise.resolve(result);
   }
   return loadLegacy()
     .then((mod) => {

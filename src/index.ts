@@ -91,37 +91,34 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
       }
     },
   };
+  const mountOnSettings = (settingsCtx: unknown): void => {
+    const settingsService = (settingsCtx as Record<string, unknown>).settings;
+    void mountSettingsSection({
+      ctx,
+      ns: RC_SETTINGS_NAMESPACE,
+      schema: ConfigSchema,
+      entry: config,
+      hooks: settingsHooks,
+      settingsService,
+      // 旧版模块类型带 SettingsNamespace 品牌，按结构签名收窄后传入
+      loadLegacy: () =>
+        import('@deepseek-ai/dsh-settings') as unknown as Promise<{
+          installSettingsSection?: import('./settings-section.js').LegacyInstallSettingsSection;
+        }>,
+      logger,
+    }).then((result) => {
+      if (result !== 'none') {
+        console.log('[im-ringcentral] settings 域挂载路径=' + result + '（namespace=ringcentral）');
+      }
+    }).catch((err: unknown) => {
+      // mountSettingsSection 内部已兜底；此处仅防 then 回调自身异常
+      logger.warn('im-ringcentral: settings 域挂载完成回调失败: ' + (err instanceof Error ? err.message : String(err)));
+    });
+  };
   try {
     (ctx as unknown as {
       inject(names: readonly string[], callback: (scope: unknown) => void): void;
-    }).inject(['settings'], (settingsCtx) => {
-      try {
-        const settingsService = (settingsCtx as Record<string, unknown>).settings;
-        void mountSettingsSection({
-          ctx,
-          ns: RC_SETTINGS_NAMESPACE,
-          schema: ConfigSchema,
-          entry: config,
-          hooks: settingsHooks,
-          settingsService,
-          // 旧版模块类型带 SettingsNamespace 品牌，按结构签名收窄后传入
-          loadLegacy: () =>
-            import('@deepseek-ai/dsh-settings') as unknown as Promise<{
-              installSettingsSection?: import('./settings-section.js').LegacyInstallSettingsSection;
-            }>,
-          logger,
-        }).then((result) => {
-          if (result !== 'none') {
-            console.log('[im-ringcentral] settings 域挂载路径=' + result + '（namespace=ringcentral）');
-          }
-        }).catch((err: unknown) => {
-          // mountSettingsSection 内部已兜底；此处仅防 then 回调自身异常
-          logger.warn('im-ringcentral: settings 域挂载完成回调失败: ' + (err instanceof Error ? err.message : String(err)));
-        });
-      } catch (err) {
-        logger.warn('im-ringcentral: settings 域挂载失败，仅使用 cordis config: ' + (err instanceof Error ? err.message : String(err)));
-      }
-    });
+    }).inject(['settings'], mountOnSettings);
   } catch (err) {
     logger.warn('im-ringcentral: settings 域挂载失败，仅使用 cordis config: ' + (err instanceof Error ? err.message : String(err)));
   }

@@ -103,15 +103,25 @@ describe("mountSettingsSection (dsh 版本适配)", () => {
     expect(String(warn.mock.calls[0][0])).toContain("回退加载失败");
   });
 
-  it("installSection 同步抛出时异常向上传播（由调用方 try/catch 兜底）", () => {
+  it("installSection 同步抛出时兜底为 none 并告警（不向调用方抛出）", async () => {
+    const warn = vi.fn();
     const installSection = vi.fn(() => {
       throw new Error("provider rejected");
     });
+    const result = mountSettingsSection<{ botToken: string }>({
+      ctx: { marker: "ctx" } as never,
+      ns: "ringcentral",
+      schema: { marker: "schema" },
+      entry: { botToken: "tok" },
+      hooks: { setSource: vi.fn(), onChange: vi.fn() },
+      settingsService: { installSection },
+      loadLegacy: () => Promise.resolve({}),
+      logger: { warn },
+    });
 
-    expect(() =>
-      mount({
-        settingsService: { installSection },
-      }),
-    ).toThrow("provider rejected");
+    await expect(result).resolves.toBe("none");
+    expect(installSection).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain("provider rejected");
   });
 });
