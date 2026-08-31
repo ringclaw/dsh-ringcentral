@@ -5,7 +5,7 @@
  * 网关组装（准入判定 + 入站 + 出站 + 生命周期）见 src/gateway/。
  */
 import type { Context } from '@deepseek-ai/cordis';
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings';
+import { mountSettingsSection, type SettingsSectionHooks } from './settings-section.js';
 import { ConfigSchema, type ImRingCentralConfig } from './config.js';
 import { resolveAccount } from './ringcentral/accounts.js';
 import { resolveSecret, installCredentialsInjection, watchManagedCredentialsFile } from './ringcentral/credentials.js';
@@ -22,8 +22,12 @@ export const name = 'im-ringcentral';
 export const inject = ['agents'];
 export const Config = ConfigSchema;
 
-/** settings 域 namespace：Web GUI「设置 → 插件 → 插件配置」卡片的 key */
-export const RC_SETTINGS_NAMESPACE = settingsNamespace('ringcentral');
+/**
+ * settings 域 namespace：Web GUI「设置 → 插件 → 插件配置」卡片的 key。
+ * dsh >= 0.1.2 已移除 settingsNamespace 品牌函数（小写连字符字符串经
+ * provider 运行时校验即可）；客户端卡片与 Host 侧按此字面值配对。
+ */
+export const RC_SETTINGS_NAMESPACE = 'ringcentral';
 
 export type { ImRingCentralConfig } from './config.js';
 
@@ -41,6 +45,9 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
   // 下一条 IM 消息按新配置生效（密钥字段豁免，见 settings-merge.ts）。
   // 注意：入站判定/历史工具读取 account.config（resolveAccount 启动时的副本），
   // 因此两份对象都必须合并，否则 GUI 保存的 access/提示词/历史配置不生效。
+  // 跨版本适配：dsh >= 0.1.2 走 settings.installSection（模块级
+  // installSettingsSection 已移除）；0.1.1-rc.2 及更早经动态 import 兜底。
+  // inject 回调是跨 isolate 的通道（桌面端 bundle 行 ctx.get 读不到 host 服务）。
   let liveResolved: () => ImRingCentralConfig = () => config;
   let accountRef: ResolvedAccount | undefined;
   let settingsReady = false;
@@ -48,42 +55,69 @@ export async function apply(ctx: Context, config: ImRingCentralConfig): Promise<
   const settingsSettledPromise = new Promise<void>((resolve) => {
     settingsSettled = resolve;
   });
+  const settingsHooks: SettingsSectionHooks<ImRingCentralConfig> = {
+    setSource: (source: () => ImRingCentralConfig) => {
+      liveResolved = source;
+      console.log('[im-ringcentral] settings 域已挂载（namespace=ringcentral），Web GUI 配置卡可用');
+      debugLog(true, '[boot] settings namespace mounted (ringcentral)');
+      if (!settingsReady) {
+        settingsReady = true;
+        settingsSettled();
+      }
+    },
+    onChange: () => {
+      try {
+        const resolved = liveResolved();
+        mergeLiveConfig(config, resolved);
+        if (accountRef) mergeLiveConfig(accountRef.config, resolved);
+        // 密钥可能随 settings 变更（GUI 密钥保存路径）：调度热换（rotate 内对比无变化即 no-op）
+        scheduleRotation('settings/updated');
+        if (resolved.debug) {
+          logger.debug(
+            'im-ringcentral: settings 已合并: access=' + JSON.stringify(resolved.access) +
+            ' requireMention=' + resolved.requireMention +
+            ' groupPrompt=' + (resolved.groupPrompt ?? '') +
+            ' homeChannel=' + resolved.homeChannel,
+          );
+          debugLog(true,
+            '[settings] merged: access=' + JSON.stringify(resolved.access) +
+            ' requireMention=' + resolved.requireMention +
+            ' groupPrompt=' + (resolved.groupPrompt ?? '') +
+            ' homeChannel=' + resolved.homeChannel,
+          );
+        }
+      } catch (err) {
+        logger.warn('im-ringcentral: settings 变更合并失败: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    },
+  };
   try {
-    installSettingsSection(ctx, RC_SETTINGS_NAMESPACE, ConfigSchema, config, {
-      setSource: (source: () => ImRingCentralConfig) => {
-        liveResolved = source;
-        console.log('[im-ringcentral] settings 域已挂载（namespace=ringcentral），Web GUI 配置卡可用');
-        debugLog(true, '[boot] settings namespace mounted (ringcentral)');
-        if (!settingsReady) {
-          settingsReady = true;
-          settingsSettled();
-        }
-      },
-      onChange: () => {
-        try {
-          const resolved = liveResolved();
-          mergeLiveConfig(config, resolved);
-          if (accountRef) mergeLiveConfig(accountRef.config, resolved);
-          // 密钥可能随 settings 变更（GUI 密钥保存路径）：调度热换（rotate 内对比无变化即 no-op）
-          scheduleRotation('settings/updated');
-          if (resolved.debug) {
-            logger.debug(
-              'im-ringcentral: settings 已合并: access=' + JSON.stringify(resolved.access) +
-              ' requireMention=' + resolved.requireMention +
-              ' groupPrompt=' + (resolved.groupPrompt ?? '') +
-              ' homeChannel=' + resolved.homeChannel,
-            );
-            debugLog(true,
-              '[settings] merged: access=' + JSON.stringify(resolved.access) +
-              ' requireMention=' + resolved.requireMention +
-              ' groupPrompt=' + (resolved.groupPrompt ?? '') +
-              ' homeChannel=' + resolved.homeChannel,
-            );
+    (ctx as unknown as {
+      inject(names: readonly string[], callback: (scope: unknown) => void): void;
+    }).inject(['settings'], (settingsCtx) => {
+      try {
+        const settingsService = (settingsCtx as Record<string, unknown>).settings;
+        void mountSettingsSection({
+          ctx,
+          ns: RC_SETTINGS_NAMESPACE,
+          schema: ConfigSchema,
+          entry: config,
+          hooks: settingsHooks,
+          settingsService,
+          // 旧版模块类型带 SettingsNamespace 品牌，按结构签名收窄后传入
+          loadLegacy: () =>
+            import('@deepseek-ai/dsh-settings') as unknown as Promise<{
+              installSettingsSection?: import('./settings-section.js').LegacyInstallSettingsSection;
+            }>,
+          logger,
+        }).then((result) => {
+          if (result !== 'none') {
+            console.log('[im-ringcentral] settings 域挂载路径=' + result + '（namespace=ringcentral）');
           }
-        } catch (err) {
-          logger.warn('im-ringcentral: settings 变更合并失败: ' + (err instanceof Error ? err.message : String(err)));
-        }
-      },
+        });
+      } catch (err) {
+        logger.warn('im-ringcentral: settings 域挂载失败，仅使用 cordis config: ' + (err instanceof Error ? err.message : String(err)));
+      }
     });
   } catch (err) {
     logger.warn('im-ringcentral: settings 域挂载失败，仅使用 cordis config: ' + (err instanceof Error ? err.message : String(err)));

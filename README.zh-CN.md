@@ -215,6 +215,7 @@ harness 服务均为 stub）。
 | `tests/credentials.test.ts` | `resolveSecret` 解析链（服务 → 环境 → 托管文件）、inject 句柄、文件解析器、文件 watcher |
 | `tests/settings-merge.test.ts` | 运行时/账号副本的配置合并、密钥字段豁免、server/占位消息分支 |
 | `tests/settings-redact.test.ts` | `role('secret')` wire redaction 与 sidecar |
+| `tests/settings-section.test.ts` | settings 挂载跨版本适配：`installSection`（harness ≥ 0.1.2）与旧 `installSettingsSection` 回退（≤ 0.1.1-rc.2）、失败兜底 |
 | `tests/monitor.test.ts` | WS 帧提取、post 过滤（自身回声/应答标记）、websocket URL 构造 |
 | `tests/rotation-scheduler.test.ts` | debounce 合并、单飞、dispose（抽取模块，fake timers） |
 | `tests/gateway-rotation.test.ts` | **fake-harness 集成**：`rotate()` 重建客户端、重注册历史工具、重连 websocket；同 token no-op；缺 token 失败安全 |
@@ -238,6 +239,12 @@ harness 服务均为 stub）。
 | 私聊被忽略 | `access.dmMode: disabled` 或发送者不在 `access.dmAllow` | 检查 `access.dmMode` / `access.dmAllow` |
 | 历史工具返回空 | 目标聊天对 bot 与 owner 均不可见 | 读取链 bot 优先、owner 回退；传裸 chat id 或 `channel:<chatId>`，并确认至少一个客户端是该聊天成员 |
 | agent 提问在 RingCentral 收不到答复 | web profile 已注册 GUI provider | 提问显示在网页 UI；改用专用 profile 或直接在网页作答 |
+| harness 升级后插件配置卡消失，或保存/重置失败 | harness ≥ 0.1.2 将 settings 注册改为 `settings.installSection()` 并移除了 `connection.api`；≤ 0.4.1 仍在使用被删除的 API | 升级到 `dsh-ringcentral` ≥ 0.4.2（双路径：≥ 0.1.2 走 `installSection`，≤ 0.1.1-rc.2 自动回退旧接口） |
+
+## harness 版本兼容
+
+- `dsh-ringcentral` ≥ 0.4.2 同时支持两代 harness：**≥ 0.1.2-alpha**（settings 经 `settings.installSection`，写入经 `settingsScope.mutate`）与 **0.1.1-rc.2 及更早**（旧 `installSettingsSection` + `connection.api.settings.mutate` 回退）。
+- `dsh-ringcentral` ≤ 0.4.1 仅支持 ≤ 0.1.1-rc.2 的 settings API，在 harness ≥ 0.1.2 上无法启动。
 
 ## License
 
