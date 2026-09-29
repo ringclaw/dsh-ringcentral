@@ -1,9 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   extractPostFromWsFrame,
   shouldProcessPost,
   buildWebSocketUrl,
+  RingCentralWebSocketMonitor,
 } from "../src/ringcentral/monitor.js";
+import type { RingCentralClient } from "../src/ringcentral/client.js";
 import { ANSWER_START } from "../src/ringcentral/shared.js";
 import type { Post } from "../src/ringcentral/types.js";
 
@@ -94,5 +96,69 @@ describe("buildWebSocketUrl", () => {
   it("does not duplicate an existing access token", () => {
     const withToken = uri + "?access_token=old";
     expect(buildWebSocketUrl({ uri: withToken, ws_access_token: "new" })).toBe(withToken);
+  });
+});
+
+describe("RingCentralWebSocketMonitor connect timeout", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("breaks the start() deadlock when the WebSocket never opens, then retries", async () => {
+    // A WebSocket that stays CONNECTING forever: TCP/TLS may be up but the
+    // handshake never completes — exactly the half-open case that previously
+    // left start() awaiting connectAndListen forever.
+    class NeverOpenWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+      readonly readyState = NeverOpenWebSocket.CONNECTING;
+      url = "wss://example.invalid/ws";
+      private readonly listeners = new Map<string, Set<(event: unknown) => void>>();
+      addEventListener(type: string, listener: (event: unknown) => void): void {
+        let set = this.listeners.get(type);
+        if (!set) {
+          set = new Set();
+          this.listeners.set(type, set);
+        }
+        set.add(listener);
+      }
+      removeEventListener(type: string, listener: (event: unknown) => void): void {
+        this.listeners.get(type)?.delete(listener);
+      }
+      send(): void {}
+      close(): void {}
+    }
+    vi.stubGlobal("WebSocket", NeverOpenWebSocket);
+
+    const fakeClient = {
+      createWebSocketToken: async () => ({ uri: "wss://example.invalid/ws" }),
+    } as unknown as RingCentralClient;
+
+    const ac = new AbortController();
+    const disconnected: unknown[] = [];
+    const diagnostics: string[] = [];
+    const monitor = new RingCentralWebSocketMonitor({
+      client: fakeClient,
+      abortSignal: ac.signal,
+      onMessage: () => {},
+      log: () => {},
+      onDiagnostic: (event) => { diagnostics.push(event); },
+      onDisconnected: (error) => { disconnected.push(error); },
+      connectTimeoutMs: 40,
+    });
+
+    const started = monitor.start();
+    // The timeout must fire and route into the retry loop instead of hanging.
+    await vi.waitFor(() => {
+      expect(diagnostics).toContain("ws_connect_timeout");
+      expect(disconnected.length).toBeGreaterThanOrEqual(1);
+    }, { timeout: 2000, interval: 5 });
+
+    ac.abort();
+    await started;
+    expect(disconnected[0]).toBeInstanceOf(Error);
+    expect(String(disconnected[0])).toContain("connect timeout");
   });
 });

@@ -18,6 +18,8 @@ export interface MonitorOptions {
   onDiagnostic?: (event: string, details?: Record<string, boolean | number | string>) => void;
   abortSignal: AbortSignal;
   log?: (...args: unknown[]) => void;
+  /** 连接阶段超时：`open` 未在此时限内触发即按失败收尾，交回退避重试；默认 15s。 */
+  connectTimeoutMs?: number;
 }
 
 const BACKOFF_BASE = 3000;
@@ -25,6 +27,7 @@ const BACKOFF_MAX = 60000;
 const PING_INTERVAL = 30000;
 const PONG_TIMEOUT = 60000;
 const OWN_POST_TTL_MS = 300_000;
+const CONNECT_TIMEOUT_MS = 15000;
 
 export class RingCentralWebSocketMonitor {
   private readonly sentPosts = new Map<string, number>();
@@ -69,13 +72,16 @@ export class RingCentralWebSocketMonitor {
     const client = typeof this.opts.client === "function" ? this.opts.client() : this.opts.client;
     const wsToken = await client.createWebSocketToken();
     const ws = new WebSocket(buildWebSocketUrl(wsToken));
+    let connectTimer: ReturnType<typeof setTimeout> | undefined;
     let pongTimer: ReturnType<typeof setTimeout> | undefined;
     let pingTimer: ReturnType<typeof setInterval> | undefined;
     let connected = false;
+    const connectTimeoutMs = this.opts.connectTimeoutMs ?? CONNECT_TIMEOUT_MS;
 
     const cleanup = () => {
       clearInterval(pingTimer);
       clearTimeout(pongTimer);
+      clearTimeout(connectTimer);
       try {
         ws.close();
       } catch {
@@ -89,7 +95,17 @@ export class RingCentralWebSocketMonitor {
     abortSignal.addEventListener("abort", onAbort, { once: true });
 
     return new Promise<void>((resolve, reject) => {
+      // 半开连接（TCP/TLS 已建而 WS `open` 不触发）会让 start() 永远卡在 await、
+      // 走不到 catch 退避重试；限时未 open 即按失败收尾，把连接交回 start() 的重试循环。
+      connectTimer = setTimeout(() => {
+        cleanup();
+        abortSignal.removeEventListener("abort", onAbort);
+        onDiagnostic?.("ws_connect_timeout");
+        reject(new Error("WebSocket connect timeout after " + connectTimeoutMs + "ms"));
+      }, connectTimeoutMs);
+
       ws.addEventListener("open", () => {
+        clearTimeout(connectTimer);
         log("[rc-monitor] WebSocket connected");
         onDiagnostic?.("ws_open");
       });
